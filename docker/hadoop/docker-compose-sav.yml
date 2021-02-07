@@ -1,0 +1,119 @@
+version: "3"
+services:
+    # Reverse proxy
+    nginx:
+        image: nginx:latest
+        container_name: reverse
+        hostname: reverse
+        restart: always
+        networks:
+            - mynet
+        volumes:
+            - ./config:/etc/nginx
+            - ./certs:/etc/ssl/private
+            - ./logs:/logs
+        ports:
+            - 80:80
+            - 443:443
+        environment:
+            - TZ=Europe/Madrid
+            - APPLICATION_URL=http://localhost
+            - NGINX_HOST=localhost
+            - NGINX_PORT=80
+
+    # http://localhost:9870/
+    # HDFS: Namenode
+    namenode:
+        image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+        container_name: namenode
+        restart: always
+        networks:
+            - mynet
+        ports:
+            - 9870:9870
+            - 9000:9000
+        volumes:
+            - hadoop_namenode:/hadoop/dfs/name
+        environment:
+            - TZ=Europe/Madrid
+            - CLUSTER_NAME=test
+        env_file:
+            - ./hadoop.env
+
+    # HDFS: Datanode
+    # https://stackoverflow.com/a/64981792
+    datanode:
+        image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+        container_name: datanode
+        restart: always
+        hostname: localhost
+        networks:
+            - mynet
+        ports:
+            - 9864:9864
+        volumes:
+            - hadoop_datanode:/hadoop/dfs/data
+        environment:
+            TZ: "Europe/Madrid"
+            SERVICE_PRECONDITION: "namenode:9870"
+#            HDFS_CONF_dfs_datanode_http_address: "0.0.0.0:9864"
+        env_file:
+            - ./hadoop.env
+
+    # https://hadoop.apache.org/docs/current/hadoop-yarn/hadoop-yarn-site/YARN.html
+    # Apache Hadoop YARN: ResourceManager
+    resourcemanager:
+        image: bde2020/hadoop-resourcemanager:2.0.0-hadoop3.2.1-java8
+        container_name: resourcemanager
+        restart: always
+        networks:
+            - mynet
+        ports:
+            - 8088:8088
+        environment:
+            TZ: "Europe/Madrid"
+            SERVICE_PRECONDITION: "namenode:9000 namenode:9870 datanode:9864"
+        env_file:
+            - ./hadoop.env
+
+    # Apache Hadoop YARN: NodeManager
+    nodemanager1:
+        image: bde2020/hadoop-nodemanager:2.0.0-hadoop3.2.1-java8
+        container_name: nodemanager1
+        restart: always
+        networks:
+            - mynet
+        ports:
+            - 8042:8042
+        environment:
+            TZ: "Europe/Madrid"
+            SERVICE_PRECONDITION: "namenode:9000 namenode:9870 datanode:9864 resourcemanager:8088"
+        env_file:
+            - ./hadoop.env
+
+    # MapReduce History Server
+    historyserver:
+        image: bde2020/hadoop-historyserver:2.0.0-hadoop3.2.1-java8
+        container_name: historyserver
+        restart: always
+        networks:
+            - mynet
+        ports:
+            - 8188:8188
+        volumes:
+            - hadoop_historyserver:/hadoop/yarn/timeline
+        environment:
+            TZ: "Europe/Madrid"
+            SERVICE_PRECONDITION: "namenode:9000 namenode:9870 datanode:9864 resourcemanager:8088"
+        env_file:
+            - ./hadoop.env
+
+volumes:
+    hadoop_namenode:
+    hadoop_datanode:
+    hadoop_historyserver:
+
+networks:
+    mynet:
+        external:
+            name: mynet

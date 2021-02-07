@@ -1,0 +1,181 @@
+version: "3"
+services:
+    # Reverse proxy
+    nginx:
+        image: nginx:latest
+        container_name: reverse
+#        hostname: reverse
+        restart: always
+        networks:
+            - mynet
+        volumes:
+            - ./config:/etc/nginx
+            - ./certs:/etc/ssl/private
+            - ./logs:/logs
+            - ./home:/www/data
+        ports:
+            - 80:80
+            - 443:443
+            - 9870:9870
+            - 9864:9864
+            - 8088:8088
+            - 8188:8188
+            - 8081:8081
+            - 8080:8080
+        environment:
+            TZ: Europe/Madrid
+#            APPLICATION_URL: http://localhost
+#            NGINX_HOST: localhost
+#            NGINX_PORT: 80
+
+    # http://localhost:9870/
+    # HDFS: Namenode
+    namenode:
+        image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+        container_name: namenode
+        restart: always
+        networks:
+            - mynet
+        volumes:
+            - hadoop_namenode:/hadoop/dfs/name
+        environment:
+            TZ: Europe/Madrid
+            CLUSTER_NAME: test
+        env_file:
+            - ./hadoop.env
+
+    # HDFS: Datanode
+    # https://stackoverflow.com/a/64981792
+    datanode1:
+        image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+        container_name: datanode1
+        restart: always
+        hostname: datanode1
+        networks:
+            - mynet
+        volumes:
+            - hadoop_datanode1:/hadoop/dfs/data
+        environment:
+            TZ: Europe/Madrid
+            SERVICE_PRECONDITION: namenode:9870
+#            HDFS_CONF_dfs_datanode_http_address: 0.0.0.0:9864
+        env_file:
+            - ./hadoop.env
+
+    # HDFS: Datanode
+    # https://stackoverflow.com/a/64981792
+    datanode2:
+        image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+        container_name: datanode2
+        restart: always
+        hostname: datanode2
+        networks:
+            - mynet
+        volumes:
+            - hadoop_datanode2:/hadoop/dfs/data
+        environment:
+            TZ: Europe/Madrid
+            SERVICE_PRECONDITION: namenode:9870
+#            HDFS_CONF_dfs_datanode_http_address: 0.0.0.0:9864
+        env_file:
+            - ./hadoop.env
+
+    # https://hadoop.apache.org/docs/current/hadoop-yarn/hadoop-yarn-site/YARN.html
+    # Apache Hadoop YARN: ResourceManager
+    resourcemanager:
+        image: bde2020/hadoop-resourcemanager:2.0.0-hadoop3.2.1-java8
+        container_name: resourcemanager
+        restart: always
+        networks:
+            - mynet
+        environment:
+            TZ: Europe/Madrid
+            SERVICE_PRECONDITION: namenode:9000 namenode:9870 datanode1:9864 datanode2:9864
+        env_file:
+            - ./hadoop.env
+
+    # Apache Hadoop YARN: NodeManager
+    nodemanager1:
+        image: bde2020/hadoop-nodemanager:2.0.0-hadoop3.2.1-java8
+        container_name: nodemanager1
+        restart: always
+        networks:
+            - mynet
+        environment:
+            TZ: Europe/Madrid
+            SERVICE_PRECONDITION: namenode:9000 namenode:9870 datanode1:9864 datanode2:9864 resourcemanager:8088
+        env_file:
+            - ./hadoop.env
+
+    # MapReduce History Server
+    historyserver:
+        image: bde2020/hadoop-historyserver:2.0.0-hadoop3.2.1-java8
+        container_name: historyserver
+        restart: always
+        networks:
+            - mynet
+        volumes:
+            - hadoop_historyserver:/hadoop/yarn/timeline
+        environment:
+            TZ: Europe/Madrid
+            SERVICE_PRECONDITION: namenode:9000 namenode:9870 datanode1:9864 datanode2:9864 resourcemanager:8088
+        env_file:
+            - ./hadoop.env
+
+    # spark
+    # configuracion: https://spark.apache.org/docs/3.0.1/configuration.html
+    sparkmaster:
+        image: bde2020/spark-master:3.0.1-hadoop3.2
+        container_name: sparkmaster
+        networks:
+            - mynet
+        environment:
+            TZ: Europe/Madrid
+            INIT_DAEMON_STEP: setup_spark
+            SPARK_PUBLIC_DNS: sparkmaster
+            constraint: node==master
+        env_file:
+            - ./hadoop.env
+
+    sparkworker1:
+        image: bde2020/spark-worker:3.0.1-hadoop3.2
+        container_name: sparkworker1
+        hostname: sparkworker1
+        networks:
+            - mynet
+        depends_on:
+            - sparkmaster
+        environment:
+            TZ: Europe/Madrid
+            SPARK_MASTER: spark://sparkmaster:7077
+            SPARK_PUBLIC_DNS: sparkworker1
+            constraint: node==sparkworker1
+        env_file:
+            - ./hadoop.env
+
+    sparkworker2:
+        image: bde2020/spark-worker:3.0.1-hadoop3.2
+        container_name: sparkworker2
+        hostname: sparkworker2
+        networks:
+            - mynet
+        depends_on:
+            - sparkmaster
+        environment:
+            TZ: Europe/Madrid
+            SPARK_MASTER: spark://sparkmaster:7077
+            SPARK_PUBLIC_DNS: sparkworker2
+            constraint: node==sparkworker2
+        env_file:
+            - ./hadoop.env
+
+volumes:
+    hadoop_namenode:
+    hadoop_datanode1:
+    hadoop_datanode2:
+    hadoop_historyserver:
+
+networks:
+    mynet:
+        external:
+            name: mynet

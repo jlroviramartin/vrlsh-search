@@ -1,0 +1,22 @@
+# https://github.com/big-data-europe/docker-spark
+version: '3'
+services:
+  # docker-compose -f .\docker-compose-submit.yml up
+  # Para ejecutar con docker (¡NO admite rutas relativas en los volumenes!):
+  #   docker run --tty --interactive --network=mynet -v C:\Users\joseluis\OneDrive\TFM\scala-spark-test\target\scala-spark-test-1.0-SNAPSHOT.jar:/app/application.jar -e "SPARK_APPLICATION_MAIN_CLASS=org.example.App" -e "ENABLE_INIT_DAEMON=false" bde2020/spark-submit:3.0.1-hadoop3.2 /bin/bash
+  #   docker run --network=mynet -v C:\Users\joseluis\OneDrive\TFM\scala-spark-test\target\scala-spark-test-1.0-SNAPSHOT.jar:/app/application.jar -e "SPARK_APPLICATION_MAIN_CLASS=org.example.App" -e "ENABLE_INIT_DAEMON=false" bde2020/spark-submit:3.0.1-hadoop3.2 /submit.sh
+  spark-submit:
+    image: bde2020/spark-submit:3.0.1-hadoop3.2
+    container_name: spark-submit
+    networks:
+      - mynet
+    environment:
+      - SPARK_APPLICATION_MAIN_CLASS=org.example.App
+      - SPARK_APPLICATION_ARGS=""
+      - ENABLE_INIT_DAEMON=false
+    volumes:
+      - ../../target/scala-spark-test-1.0-SNAPSHOT.jar:/app/application.jar
+
+networks:
+  mynet:
+    name: mynet
