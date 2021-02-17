@@ -1,23 +1,24 @@
 package org.example.buckets
 
-import org.apache.spark.mllib.linalg.Vector
-import org.example.evaluators.{HashPoint, TrHashEvaluator, VectorHashEvaluator}
-import org.example.HashOptions
+import org.apache.spark.ml.linalg.Vector
 
 import scala.collection.mutable
 
-class TrBuckets(hashEvaluator: TrHashEvaluator)
+import org.example.evaluators.{HashPoint, TransformHashEvaluator, EuclideanHashEvaluator}
+import org.example.HashOptions
+
+class TrBuckets(hashEvaluator: TransformHashEvaluator)
     extends Buckets(
         hashEvaluator,
         new mutable.HashMap[Double, mutable.Map[HashPoint, Bucket]]()) {
 
     def this(options: HashOptions) = {
-        this(new VectorHashEvaluator(options));
+        this(new EuclideanHashEvaluator(options));
     }
 
     override def put(point: Vector, resolution: Double): Unit = {
         val trPoint = hashEvaluator.transform(point);
-        val hash = hashEvaluator.trHash(trPoint, resolution);
+        val hash = hashEvaluator.hashTransformed(trPoint, resolution);
 
         map.get(resolution) match {
             case Some(innerMap) => innerMap.get(hash) match {

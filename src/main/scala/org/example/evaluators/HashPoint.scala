@@ -1,10 +1,14 @@
 package org.example.evaluators
 
 import java.util
+import scala.collection.Iterable
 
-class HashPoint(private val values: Array[Int]) {
+class HashPoint(private val values: Array[Int])
+    extends Serializable {
 
-    def this(seq: Seq[Int]) = this(seq.toArray)
+    def this(seq: Iterable[Int]) = this(seq.toArray)
+
+    def this(hash: HashPoint, index: Int) = this(hash.values ++ Iterator(index))
 
     override def hashCode(): Int = {
         util.Arrays.hashCode(values)

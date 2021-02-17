@@ -2,7 +2,7 @@ package org.example.evaluators
 
 import org.example.HashOptions
 
-import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.ml.linalg.Vector
 import scala.util.Random
 
 /**
@@ -20,13 +20,6 @@ class LineEvaluator(val w: Seq[Double], val b: Double)
     def this(options: HashOptions) = this(options.random, options.dim);
 
     def dimension: Int = w.length
-
-    def evaluate(point: Seq[Double]): Double = evaluate(point, 1)
-
-    def evaluate(point: Seq[Double], resolution: Double): Double = {
-        assert(point.length == dimension)
-        ((0 until dimension).map(i => point(i) * w(i)).sum + b) * resolution;
-    }
 
     def evaluate(point: Vector): Double = evaluate(point, 1)
 

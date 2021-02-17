@@ -1,7 +1,7 @@
 package org.example
 
 import org.apache.spark.sql.{Dataset, SparkSession}
-import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.ml.linalg.Vector
 
 // SCALA Extension methods: https://sachabarbs.wordpress.com/2015/10/23/scala-extension-methods/
 class PointProcessor(val options: HashOptions) {

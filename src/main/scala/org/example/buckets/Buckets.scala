@@ -1,9 +1,10 @@
 package org.example.buckets
 
-import org.apache.spark.mllib.linalg.Vector
-import org.example.evaluators.{HashEvaluator, HashPoint}
+import org.apache.spark.ml.linalg.Vector
 
 import scala.collection.{Iterable, mutable}
+
+import org.example.evaluators.{HashEvaluator, HashPoint}
 
 class Buckets(val hashEvaluator: HashEvaluator,
               val map: mutable.Map[Double, mutable.Map[HashPoint, Bucket]])
@@ -23,10 +24,7 @@ class Buckets(val hashEvaluator: HashEvaluator,
 
     def getBuckets(resolution: Double): Iterable[(HashPoint, Bucket)] = {
         map.get(resolution) match {
-            case Some(map) => {
-                Console.println("MIERDA " + map.size);
-                map
-            }
+            case Some(map) => map
             case None => Iterable.empty
         }
     }

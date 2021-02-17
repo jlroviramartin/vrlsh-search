@@ -2,10 +2,8 @@ package org.example
 
 import Utils._
 
-import math._
-import org.apache.spark.mllib.linalg.Vectors
-import org.apache.spark.mllib.linalg.Vector
-import org.apache.spark.sql.functions.udf
+import org.apache.spark.ml.linalg.Vectors
+import org.apache.spark.ml.linalg.Vector
 
 /**
  * Distance utilities.

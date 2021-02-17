@@ -1,7 +1,6 @@
 package org.example
 
-import org.apache.spark.mllib.linalg.Vectors
-import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.ml.linalg.Vector
 
 class EnvelopeDoubleBuffer(val min: Array[Double], val max: Array[Double]) {
     def this(dimension: Int) = {

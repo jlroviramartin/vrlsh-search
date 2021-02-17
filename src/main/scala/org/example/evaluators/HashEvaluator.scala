@@ -1,13 +1,10 @@
 package org.example.evaluators
 
-import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.ml.linalg.Vector
 
 /**
  * Evaluador de Hash.
  */
-trait HashEvaluator {
-
-    def hash(v: Seq[Double], resolution: Double): HashPoint;
-
+trait HashEvaluator extends Serializable {
     def hash(v: Vector, resolution: Double): HashPoint;
 }
