@@ -41,4 +41,13 @@ class DefaultHasher(val evaluators: Array[HashEvaluator])
     override def toString: String = {
         s"num_tables: $numTables " + firstHashEvaluator.map(_.toString);
     }
+
+    override def hashCode: Int = evaluators.toSeq.hashCode
+
+    override def equals(obj: Any): Boolean = {
+        obj match {
+            case other: DefaultHasher => evaluators.toSeq.equals(other.evaluators.toSeq)
+            case _ => false
+        }
+    }
 }

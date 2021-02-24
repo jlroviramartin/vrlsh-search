@@ -9,7 +9,7 @@ import scala.util.Random
  * Hash evaluator for a vector.
  * Mapea vectores: dim -> alfa
  */
-class EuclideanHashEvaluator(evaluators: Seq[LineEvaluator])
+class EuclideanHashEvaluator(val evaluators: Seq[LineEvaluator])
     extends TransformHashEvaluator with Serializable {
 
     private def this() = this(Seq.empty[LineEvaluator])
@@ -27,4 +27,13 @@ class EuclideanHashEvaluator(evaluators: Seq[LineEvaluator])
     def hashTransformed(point: Vector, radius: Double): HashPoint = new HashPoint(point.toArray.map(x => (x / radius).toInt));
 
     override def toString: String = s"keyLength: $keyLength  dimension: $dimension";
+
+    override def hashCode: Int = evaluators.hashCode()
+
+    override def equals(obj: Any): Boolean = {
+        obj match {
+            case other: EuclideanHashEvaluator => evaluators.equals(other.evaluators)
+            case _ => false
+        }
+    }
 }

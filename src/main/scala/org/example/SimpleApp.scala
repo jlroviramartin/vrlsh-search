@@ -89,11 +89,15 @@ object SimpleApp {
         println("----- Calculando el Hasher -----")
         val file = baseDirectory.resolve("hasher.data")
 
-        /*val (hasher, radius) = time { // 3:45 min
-            Hasher.getHasherForDataset(data, dimension, desiredSize);
+        val evaluate = true;
+
+        val (hasher, radius) = if (evaluate) {
+            val (a, b) = time { Hasher.getHasherForDataset(data, dimension, desiredSize) } // 3:45 min
+            DataStore.kstore(file, (a, b))
+            (a, b)
+        } else {
+            DataStore.kload(file, classOf[(Hasher, Double)])
         }
-        DataStore.kstore(file, (hasher, radius))*/
-        val (hasher, radius) = DataStore.kload(file, classOf[(Hasher, Double)])
 
         println("----- Iterando por las tablas -----")
         var numTable = 1;
@@ -145,10 +149,10 @@ object SimpleApp {
                     Utils.addOrUpdate(statistics, numPoints, count, (prev: Int) => prev + count)
                 }
 
-            // DEBUG
             val remaining = grouped
                 .filter { case (_, it) => it.size < min || it.size > max }
 
+            // DEBUG
             println(s"    Puntos restantes = ${remaining.count}")
 
             if (remaining.isEmpty()) {

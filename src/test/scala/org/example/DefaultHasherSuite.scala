@@ -66,4 +66,43 @@ class DefaultHasherSuite extends AnyFunSuite {
         assertResult("mundo")(map(Seq(new HashPoint(7, 8, 9))));
         assertThrows[NoSuchElementException](map(Seq(new HashPoint(10, 11, 12))));
     }
+
+    test("Default equals/hash") {
+
+        assert((1 until 5).toArray.toSeq.equals((1 until 5).toArray.toSeq));
+        assert((1 until 5).toArray.toSeq.hashCode == (1 until 5).toArray.toSeq.hashCode);
+
+        val o1 = new DefaultHasher(
+            new EuclideanHashEvaluator(Array(
+                new LineEvaluator(1.0, 2.0, 3.0),
+                new LineEvaluator(2.0, 3.0, 3.0))),
+            new EuclideanHashEvaluator(Array(
+                new LineEvaluator(4.0, 5.0, 3.0),
+                new LineEvaluator(7.0, 8.0, 3.0))))
+
+        val o2 = new DefaultHasher(
+            new EuclideanHashEvaluator(Array(
+                new LineEvaluator(1.0, 2.0, 3.0),
+                new LineEvaluator(2.0, 3.0, 3.0))),
+            new EuclideanHashEvaluator(Array(
+                new LineEvaluator(4.0, 5.0, 3.0),
+                new LineEvaluator(7.0, 8.0, 3.0))))
+
+        assert(o1.equals(o2));
+        assert(o1.hashCode == o2.hashCode);
+
+        val o3 = new DefaultHasher(
+            new EuclideanHashEvaluator(Array(
+                new LineEvaluator(1.0, 2.0, 3.0),
+                new LineEvaluator(2.0, 3.0, 3.0))),
+            new EuclideanHashEvaluator(Array(
+                new LineEvaluator(4.0, 5.0, 3.0),
+                new LineEvaluator(7.0, 8.0, 3.0))),
+            new EuclideanHashEvaluator(Array(
+                new LineEvaluator(1.0, 1.0, 3.0),
+                new LineEvaluator(2.0, 2.0, 3.0))))
+
+        assert(!o1.equals(o3));
+        assert(o1.hashCode != o3.hashCode);
+    }
 }

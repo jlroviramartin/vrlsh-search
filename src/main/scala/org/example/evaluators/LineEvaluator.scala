@@ -11,6 +11,8 @@ import scala.util.Random
 class LineEvaluator(val w: Array[Double], val b: Double)
     extends Serializable {
 
+    private def this() = this(new Array[Double](0), 0.0)
+
     def this(values: Double*) = {
         this((0 until values.size - 1).map(i => values(i)).toArray, values(values.size - 1))
     }
@@ -30,5 +32,14 @@ class LineEvaluator(val w: Array[Double], val b: Double)
     def evaluate(point: Vector, radius: Double): Double = {
         assert(point.size == dimension)
         ((0 until dimension).map(i => point(i) * w(i)).sum + b) / radius;
+    }
+
+    override def hashCode: Int = w.toSeq.hashCode() ^ b.hashCode()
+
+    override def equals(obj: Any): Boolean = {
+        obj match {
+            case other: LineEvaluator => w.toSeq.equals(other.w.toSeq) && b == other.b
+            case _ => false
+        }
     }
 }
