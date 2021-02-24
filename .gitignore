@@ -32,3 +32,4 @@ packages/
 
 target/
 /.idea/
+/scala-spark-test.iml
