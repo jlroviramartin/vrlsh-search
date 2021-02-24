@@ -2,15 +2,18 @@ package org.example
 
 import org.apache.spark.ml.linalg.Vector
 
-class EnvelopeDoubleBuffer(val min: Array[Double], val max: Array[Double]) {
+import java.util.Arrays
+
+class EnvelopeDoubleBuffer(val min: Array[Double], val max: Array[Double]) extends Serializable {
+
     def this(dimension: Int) = {
         this(new Array[Double](dimension), new Array[Double](dimension));
         setEmpty();
     }
 
-    def this(min: Seq[Double], max: Seq[Double]) = this(min.toArray, max.toArray);
+    def this(min: Iterable[Double], max: Iterable[Double]) = this(min.toArray, max.toArray);
 
-    def this(point: Seq[Double]) = this(point.toArray, point.toArray);
+    def this(points: Iterable[Double]) = this(points.toArray, points.toArray);
 
     def this(point: Vector) = this(point.toArray, point.toArray);
 
@@ -20,9 +23,7 @@ class EnvelopeDoubleBuffer(val min: Array[Double], val max: Array[Double]) {
 
     def maximum: Seq[Double] = max;
 
-    def isEmpty: Boolean = {
-        min(0) > max(0);
-    }
+    def isEmpty: Boolean = min(0) > max(0);
 
     def setEmpty(): Unit = {
         indices.foreach(i => {
@@ -83,4 +84,15 @@ class EnvelopeDoubleBuffer(val min: Array[Double], val max: Array[Double]) {
             }
         });
     }
+
+    override def hashCode: Int = Arrays.hashCode(min) ^ Arrays.hashCode(max)
+
+    override def equals(obj: Any): Boolean = {
+        obj match {
+            case other: EnvelopeDoubleBuffer => Arrays.equals(min, other.min) && Arrays.equals(max, other.max)
+            case _ => false
+        }
+    }
+
+    override def toString: String = s"[ ${Arrays.toString(min)} ; ${Arrays.toString(max)} ]";
 }

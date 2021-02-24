@@ -7,9 +7,9 @@ import org.apache.spark.ml.linalg.Vector
  */
 trait TransformHashEvaluator extends HashEvaluator {
 
-    final def hash(point: Vector, resolution: Double): HashPoint = hashTransformed(transform(point), resolution);
+    final def hash(point: Vector, radius: Double): HashPoint = hashTransformed(transform(point), radius);
 
     def transform(point: Vector): Vector;
 
-    def hashTransformed(point: Vector, resolution: Double): HashPoint;
+    def hashTransformed(point: Vector, radius: Double): HashPoint;
 }

@@ -8,27 +8,73 @@ import org.example.{HashOptions, Utils}
 
 import scala.util.Random
 
+@SerialVersionUID(-4061941561292649692l)
 trait Hasher extends Serializable {
-    def hash(v: Vector, resolution: Double): Seq[HashPoint];
+    /**
+     * Calcula el hash del punto {@code point} para el radio {@code radius}.
+     * <br>
+     * Nota: los hash están indexados según el índice de tabla.
+     */
+    def hash(point: Vector, radius: Double): Seq[HashPoint];
 
-    final def hashData(data: RDD[(Long, LabeledPoint)], radius: Double): RDD[(Long, HashPoint)] = {
+    def numTables: Int;
+
+    def hash(tableIndex: Int, point: Vector, radius: Double): HashPoint;
+
+    def tables: Seq[HashEvaluator]
+
+    /**
+     * (id: Long, point: Vector) -> (id: Long, hash: HashPoint)
+     * <br>
+     * Para cada indice+punto, calcula todos los hashes del punto y los devuelve.
+     */
+    final def hashData(data: RDD[(Long, Vector)], radius: Double): RDD[(Long, HashPoint)] = {
         val t = this
         val bt = data.sparkContext.broadcast(t)
 
-        data.flatMap({ case (index, point) => bt.value.hash(point.features, radius).map(h => (index, h)) });
+        data.flatMap({ case (id, point) => bt.value.hash(point, radius).map(hash => (id, hash)) });
     }
 
-    final def getBucketCount(data: RDD[(Long, LabeledPoint)],
-                             radius: Double): (Long, Int) = {
-        val currentHashes = this.hashData(data, radius)
+    /**
+     * (id: Long, point: Vector) -> (hash: HashPoint, (id: Long, point: Vector))
+     * <br>
+     * Para cada indice+punto, calcula todos los hashes del punto y los devuelve.
+     */
+    final def hashDataWithVectors(data: RDD[(Long, Vector)], radius: Double): RDD[(HashPoint, (Long, Vector))] = {
+        val t = this
+        val bt = data.sparkContext.broadcast(t)
 
-        val bucketCountBySize = currentHashes.map(_.swap)
-            .aggregateByKey(0)(
-                { case (n, index) => n + 1 },
-                { case (n1, n2) => n1 + n2 })
-            .map({ case (h, n) => (n, 1) })
-            .reduceByKey(_ + _)
-            .filter({ case (n1, x) => n1 != 1 })
+        data.flatMap({ case (id, point) => bt.value.hash(point, radius).map(hash => (hash, (id, point))) })
+    }
+
+    /**
+     * Número de puntos por hash.
+     */
+    final def sizesByHash(data: RDD[(Long, Vector)],
+                          radius: Double): RDD[(HashPoint, Int)] = {
+
+        this.hashData(data, radius) // (id, point) -> (id, hash)
+            .map(_.swap) // (id, hash) -> (hash, id)
+            .aggregateByKey(0)( // Se cuenta el número de puntos en cada bucket
+                { case (numPts, id) => numPts + 1 },
+                { case (numPts1, numPts2) => numPts1 + numPts2 })
+    }
+
+    /**
+     * Estadísticas sobre los tamaños de los buckets.
+     */
+    final def sizesStatistics(data: RDD[(Long, Vector)],
+                              radius: Double): RDD[(Int, Int)] = {
+
+        this.sizesByHash(data, radius) // (id, point) -> (id, hash)
+            .map({ case (hash, numPts) => (numPts, 1) })
+            .reduceByKey((count1, count2) => count1 + count2) // Se cuentan los buckets con el mismo número de puntos
+    }
+
+    final def getBucketCount(data: RDD[(Long, Vector)],
+                             radius: Double): (Long, Int) = {
+        val bucketCountBySize = this.sizesStatistics(data, radius)
+            .filter({ case (numPts, count) => numPts != 1 })
 
         val numBuckets = if (bucketCountBySize.isEmpty()) 0 else bucketCountBySize.map(_._2).sum().toLong
         val largestBucketSize = if (bucketCountBySize.isEmpty()) 0 else bucketCountBySize.map(_._1).max()
@@ -37,11 +83,12 @@ trait Hasher extends Serializable {
 }
 
 object Hasher extends Logging {
-    val MIN_TOLERANCE = 0.4
-    val MAX_TOLERANCE = 1.1
+    val MIN_TOLERANCE = Utils.MIN_TOLERANCE
+    val MAX_TOLERANCE = Utils.MAX_TOLERANCE
+
     val DEFAULT_RADIUS = 0.1
 
-    def getSuitableRadius(data: RDD[(Long, LabeledPoint)],
+    def getSuitableRadius(data: RDD[(Long, Vector)],
                           hasher: Hasher,
                           minValue: Double,
                           maxValue: Option[Double],
@@ -85,6 +132,7 @@ object Hasher extends Logging {
                 rightLimit = radius
             }
             if (rightLimit - leftLimit < 0.000000001) {
+
                 println(s"WARNING! - Had to select radius = $radius")
                 return radius
             }
@@ -92,7 +140,7 @@ object Hasher extends Logging {
         return 1.0 //Dummy
     }
 
-    private def computeBestKeyLength(data: RDD[(Long, LabeledPoint)], dimension: Int, desiredSize: Int): (Hasher, Double) = {
+    private def computeBestKeyLength(data: RDD[(Long, Vector)], dimension: Int, desiredSize: Int): (Hasher, Double) = {
         val FRACTION = 1.0 //0.01
         val INITIAL_RADIUS = DEFAULT_RADIUS
         val initialData = data //data.sample(false, FRACTION, 56804023).map(_.swap)
@@ -105,12 +153,12 @@ object Hasher extends Logging {
 
         val minKLength = if (initialKLength > 10) (initialKLength / 2).toInt else 5
         val maxKLength = if (initialKLength > 15) (initialKLength * 1.5).toInt else 22
-        val hNTables: Int = Math.floor(Math.pow(Utils.log2(dimension), 2)).toInt
+        val numTables: Int = Math.floor(Math.pow(Utils.log2(dimension), 2)).toInt
 
         val currentData = initialData
         //val currentData=initialData.sample(false, 0.2, 34652912) //20% of the data usually does the job.
 
-        logDebug(s"Starting hyperparameter adjusting with:\n\tL:$initialKLength\n\tN:$hNTables\n\tR:$INITIAL_RADIUS\n\tC:$desiredSize")
+        logDebug(s"Starting hyperparameter adjusting with:\n\tL:$initialKLength\n\tN:$numTables\n\tR:$INITIAL_RADIUS\n\tC:$desiredSize")
 
         var (leftLimit, rightLimit) = (minKLength, maxKLength)
         var radius = INITIAL_RADIUS
@@ -119,7 +167,9 @@ object Hasher extends Logging {
         while (true) {
             val currentLength = Math.floor((leftLimit + rightLimit) / 2.0).toInt
 
-            val tmpOptions = new HashOptions(dim = dimension, keyLength = currentLength, numTables = hNTables)
+            logDebug(s"-- currentLength $currentLength");
+
+            val tmpOptions = new HashOptions(dimension, currentLength, numTables)
             val tmpHasher = tmpOptions.newHasher()
 
             val (numBuckets, largestBucketSizeSample) = tmpHasher.getBucketCount(currentData, radius)
@@ -137,14 +187,12 @@ object Hasher extends Logging {
                     if ((numBuckets == 0) || (rightLimit - 1 == currentLength)) //If we ended up with no buckets with more than one element or the size is less than the desired minimum
                     {
                         if (isRadiusAdjusted) {
-
                             logWarning(s"WARNING! - Had to go with hyperparameters:\n\tL:${tmpOptions.keyLength}\n\tN:${tmpOptions.numTables}\n\tR:$radius")
-
                             return (tmpHasher, radius)
                         }
 
                         //We start over with a larger the radius
-                        val tmpOptions2 = new HashOptions(dim = dimension, keyLength = initialKLength, numTables = hNTables);
+                        val tmpOptions2 = new HashOptions(dimension, initialKLength, numTables);
                         val tmpHasher2 = tmpOptions2.newHasher();
 
                         radius = getSuitableRadius(currentData, tmpHasher2, radius, None, desiredSize)
@@ -159,9 +207,7 @@ object Hasher extends Logging {
                 {
                     if (leftLimit == currentLength) {
                         if (isRadiusAdjusted) {
-
                             logWarning(s"WARNING! - Had to go with hyperparameters:\n\tL:${tmpOptions.keyLength}\n\tN:${tmpOptions.numTables}\n\tR:$radius")
-
                             return (tmpHasher, radius)
                         }
 
@@ -174,10 +220,9 @@ object Hasher extends Logging {
                     else
                         leftLimit = currentLength
                 }
+
                 if (rightLimit <= leftLimit) {
-
                     logWarning(s"WARNING! - Had to go with hyperparameters:\n\tL:${tmpOptions.keyLength}\n\tN:${tmpOptions.numTables}\n\tR:$radius")
-
                     return (tmpHasher, radius)
                 }
             }
@@ -186,15 +231,15 @@ object Hasher extends Logging {
             println(s"keyLength update to ${tmpOptions.keyLength} [$leftLimit - $rightLimit] with radius $radius because largestBucket was $largestBucketSize and wanted [${desiredSize * MIN_TOLERANCE} - ${desiredSize * MAX_TOLERANCE}]")
         }
 
-        val tmpOptions3 = new HashOptions(dim = dimension, keyLength = 1, numTables = hNTables);
+        val tmpOptions3 = new HashOptions(dimension, 1, numTables);
         val tmpHasher3 = tmpOptions3.newHasher();
         (tmpHasher3, radius) //Dummy
     }
 
-    def getHasherForDataset(data: RDD[(Long, LabeledPoint)], dimension: Int, desiredSize: Int): (Hasher, Int, Double) = {
+    def getHasherForDataset(data: RDD[(Long, Vector)], dimension: Int, desiredSize: Int): (Hasher, Double) = {
         val (hasher, radius) = computeBestKeyLength(data, dimension, desiredSize)
 
         println("R0: " + radius + " " + hasher + " desiredSize: " + desiredSize)
-        (hasher, desiredSize, radius);
+        (hasher, radius);
     }
 }

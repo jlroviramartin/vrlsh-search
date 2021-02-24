@@ -8,6 +8,10 @@ import org.apache.spark.ml.linalg.Vector
 class DefaultHasher(val evaluators: Array[HashEvaluator])
     extends Hasher {
 
+    private def this() = this(new Array[HashEvaluator](0))
+
+    def this(evaluators: HashEvaluator*) = this(evaluators.toArray);
+
     def this(random: Random, dim: Int, keyLength: Int, numTables: Int) = {
         this((0 until numTables).map(_ => new EuclideanHashEvaluator(random, dim, keyLength).asInstanceOf[HashEvaluator]).toArray);
     }
@@ -18,16 +22,23 @@ class DefaultHasher(val evaluators: Array[HashEvaluator])
 
     def numTables: Int = evaluators.length;
 
-    private def firstHashEvaluator: Option[HashEvaluator] = if (evaluators.nonEmpty) Some(evaluators.head) else None;
+    def hash(tableIndex: Int, point: Vector, radius: Double): HashPoint = {
+        // Se incluye el índice en el hash
+        new HashPoint(evaluators(tableIndex).hash(point, radius), tableIndex)
+    }
+
+    def tables: Seq[HashEvaluator] = evaluators
+
+    private def firstHashEvaluator: Option[HashEvaluator] = evaluators.headOption;
 
     //def keyLength: Int = if (evaluators.nonEmpty) evaluators.head else 0;
 
-    def hash(v: Vector, resolution: Double): Seq[HashPoint] = {
+    def hash(point: Vector, radius: Double): Seq[HashPoint] = {
         // Se incluye el índice en el hash
-        evaluators.indices.map(index => new HashPoint(evaluators(index).hash(v, resolution), index))
+        evaluators.indices.map(index => new HashPoint(evaluators(index).hash(point, radius), index))
     }
 
     override def toString: String = {
-        "num_tables:" + numTables + firstHashEvaluator.map(" " + _.toString);
+        s"num_tables: $numTables " + firstHashEvaluator.map(_.toString);
     }
 }

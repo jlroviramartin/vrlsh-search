@@ -12,6 +12,8 @@ import scala.util.Random
 class EuclideanHashEvaluator(evaluators: Seq[LineEvaluator])
     extends TransformHashEvaluator with Serializable {
 
+    private def this() = this(Seq.empty[LineEvaluator])
+
     def this(random: Random, dim: Int, keyLength: Int) = this((0 until keyLength).map(_ => new LineEvaluator(random, dim)));
 
     def this(options: HashOptions) = this(options.random, options.dim, options.keyLength);
@@ -22,9 +24,7 @@ class EuclideanHashEvaluator(evaluators: Seq[LineEvaluator])
 
     def transform(point: Vector): Vector = Vectors.dense(evaluators.map(evaluator => evaluator.evaluate(point)).toArray);
 
-    def hashTransformed(point: Vector, resolution: Double): HashPoint = new HashPoint(point.toArray.map(x => (x * resolution).toInt));
+    def hashTransformed(point: Vector, radius: Double): HashPoint = new HashPoint(point.toArray.map(x => (x / radius).toInt));
 
-    override def toString: String = {
-        "keyLength: " + keyLength + " dimension: " + dimension;
-    }
+    override def toString: String = s"keyLength: $keyLength  dimension: $dimension";
 }

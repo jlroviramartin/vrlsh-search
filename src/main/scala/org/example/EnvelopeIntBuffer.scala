@@ -1,14 +1,17 @@
 package org.example
 
-class EnvelopeIntBuffer(val min: Array[Int], val max: Array[Int]) {
+import java.util.Arrays
+
+class EnvelopeIntBuffer(val min: Array[Int], val max: Array[Int]) extends Serializable {
+
     def this(dimension: Int) = {
         this(new Array[Int](dimension), new Array[Int](dimension));
         setEmpty();
     }
 
-    def this(min: Seq[Int], max: Seq[Int]) = this(min.toArray, max.toArray);
+    def this(min: Iterable[Int], max: Iterable[Int]) = this(min.toArray, max.toArray);
 
-    def this(pt: Seq[Int]) = this(pt.toArray, pt.toArray);
+    def this(points: Iterable[Int]) = this(points.toArray, points.toArray);
 
     def indices: Range = min.indices;
 
@@ -16,9 +19,7 @@ class EnvelopeIntBuffer(val min: Array[Int], val max: Array[Int]) {
 
     def maximum: Seq[Int] = max;
 
-    def isEmpty: Boolean = {
-        min(0) > max(0);
-    }
+    def isEmpty: Boolean = min(0) > max(0);
 
     def setEmpty(): Unit = {
         indices.foreach(i => {
@@ -62,4 +63,15 @@ class EnvelopeIntBuffer(val min: Array[Int], val max: Array[Int]) {
             }
         });
     }
+
+    override def hashCode: Int = Arrays.hashCode(min) ^ Arrays.hashCode(max)
+
+    override def equals(obj: Any): Boolean = {
+        obj match {
+            case other: EnvelopeIntBuffer => Arrays.equals(min, other.min) && Arrays.equals(max, other.max)
+            case _ => false
+        }
+    }
+
+    override def toString: String = s"[ ${Arrays.toString(min)} ; ${Arrays.toString(max)} ]";
 }

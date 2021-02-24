@@ -7,7 +7,7 @@ import scala.util.Random
 
 class VectorHashEvaluatorSuite extends AnyFunSuite {
     test("Vector hash evaluator") {
-        assert(new EuclideanHashEvaluator(new Random(), 3, 5).dimension == 3);
-        assert(new EuclideanHashEvaluator(new Random(), 3, 5).keyLength == 5);
+        assertResult(3)(new EuclideanHashEvaluator(new Random(), 3, 5).dimension);
+        assertResult(5)(new EuclideanHashEvaluator(new Random(), 3, 5).keyLength);
     }
 }
