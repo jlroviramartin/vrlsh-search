@@ -1,7 +1,7 @@
 package org.example
 
 import Utils._
-import com.esotericsoftware.kryo.Kryo
+import collection._
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.linalg.Vectors
@@ -76,7 +76,8 @@ object SimpleApp {
         val directory = new Directory(baseDirectory.resolve("sizes").toFile);
         directory.deleteRecursively();
 
-        algorithmv2(data, dimension, desiredSize, baseDirectory)
+        new KnnConstructionAlgorithm1(desiredSize, baseDirectory).build(data)
+        //algorithmv2(data, dimension, desiredSize, baseDirectory)
 
         spark.stop()
     }
@@ -91,19 +92,21 @@ object SimpleApp {
 
         val evaluate = true;
 
-        val (hasher, radius) = if (evaluate) {
-            val (a, b) = time { Hasher.getHasherForDataset(data, dimension, desiredSize) } // 3:45 min
-            DataStore.kstore(file, (a, b))
-            (a, b)
+        val (hasher, hashOptions, radius) = if (evaluate) {
+            val (a, b, c) = time {
+                Hasher.getHasherForDataset(data, dimension, desiredSize)
+            } // 3:45 min
+            //iDataStore.kstore(file, (a, b, c))
+            (a, b, c)
         } else {
-            DataStore.kload(file, classOf[(Hasher, Double)])
+            DataStore.kload(file, classOf[(Hasher, HashOptions, Double)])
         }
 
         println("----- Iterando por las tablas -----")
         var numTable = 1;
         for (table <- hasher.tables) {
             println(s"Tabla: $numTable")
-            algorithmv2(data, radius, table, desiredSize, baseDirectory);
+            algorithmv2(data, radius, table, hashOptions, desiredSize, baseDirectory);
 
             numTable = numTable + 1
         }
@@ -112,11 +115,14 @@ object SimpleApp {
     def algorithmv2(data: RDD[(Long, Vector)],
                     radius: Double,
                     table: HashEvaluator,
+                    hashOptions: HashOptions,
                     desiredSize: Int,
                     baseDirectory: Path): Unit = {
 
         val min = desiredSize * Utils.MIN_TOLERANCE;
         val max = desiredSize * Utils.MAX_TOLERANCE;
+
+        var currentTable = table
 
         var currentData = data
         var currentRadius = radius
@@ -128,53 +134,103 @@ object SimpleApp {
         while (!end) {
             println(s"Iteración : $iteration")
 
-            val btable = currentData.sparkContext.broadcast(table)
-            val grouped = currentData.map({ case (id, point) => (btable.value.hash(point, currentRadius), (id, point)) })
-                .groupByKey
-
             /*println("    Almacena los buckets")
-            grouped
-                .filter { case (_, it) => it.size >= 90 }
-                .map { case (hash, it) => (hash, new Bucket(it.map { case (_, point) => point })) }
-                .foreach { case (hash, bucket) => bucket.store(radius, hash, baseDirectory) }
-            */
+            storeBuckets(currentData,
+                currentRadius, table,
+                (size: Int) => size >= min && size <= max,
+                baseDirectory)*/
 
             println("    Estadísticas");
-            grouped
-                .filter { case (_, it) => it.size >= min && it.size <= max }
-                .map { case (_, it) => (it.size, 1) }
-                .reduceByKey((count1, count2) => count1 + count2) // Se cuentan los buckets con el mismo número de puntos
-                .collect()
-                .foreach { case (numPoints, count) =>
-                    Utils.addOrUpdate(statistics, numPoints, count, (prev: Int) => prev + count)
-                }
+            updateStatistics(currentData,
+                currentRadius, currentTable,
+                (size: Int) => size >= min && size <= max,
+                statistics);
 
-            val remaining = grouped
-                .filter { case (_, it) => it.size < min || it.size > max }
-
-            // DEBUG
-            println(s"    Puntos restantes = ${remaining.count}")
+            val remaining = getRemaining(currentData,
+                currentRadius, currentTable,
+                (size: Int) => size < min || size > max)
 
             if (remaining.isEmpty()) {
                 println("    Vacio!")
+
                 end = true
             }
-            else if (Utils.forAll(remaining)({ case (hash, it) => Utils.isBaseHashPoint(hash) })) {
+            else if (Utils.forAll(remaining)({ case (hash, _) => Utils.isBaseHashPoint(hash) })) {
                 println("    Todos son BASE!")
+
+                val remainingData = remaining.flatMap { case (_, it) => it }
+
+                // DEBUG
+                println(s"    Puntos restantes = ${remainingData.count}")
+
+                updateStatistics(remainingData,
+                    currentRadius, currentTable,
+                    _ => true,
+                    statistics)
+
                 end = true
             }
             else {
-                currentData = remaining.flatMap { case (hash, it) => it }
-                currentRadius = currentRadius * 1.5
+                currentData = remaining.flatMap { case (_, it) => it }
+                currentRadius = currentRadius * 1.2
                 iteration = iteration + 1
+
+                //currentTable = hashOptions.newHashEvaluator()
+
+                // DEBUG
+                println(s"    Puntos restantes = ${currentData.count}")
             }
         }
 
         println("    Estadísticas: Número de puntos - Número de buckets");
-        statistics.foreach { case (numPoints, count) => {
+        statistics.toSeq.sortBy(_._1).foreach { case (numPoints, count) => {
             println(s"$numPoints - $count")
         }
         }
+    }
+
+    def storeBuckets(data: RDD[(Long, Vector)],
+                     radius: Double, table: HashEvaluator,
+                     sizeFilter: Int => Boolean,
+                     baseDirectory: Path): Unit = {
+        val btable = data.sparkContext.broadcast(table)
+        val grouped = data.map({ case (id, point) => (btable.value.hash(point, radius), (id, point)) })
+            .groupByKey
+
+        grouped
+            .filter { case (_, it) => sizeFilter(it.size) }
+            .map { case (hash, it) => (hash, new Bucket(it.map { case (_, point) => point })) }
+            .foreach { case (hash, bucket) => bucket.store(radius, hash, baseDirectory) }
+    }
+
+    def updateStatistics(data: RDD[(Long, Vector)],
+                         radius: Double, table: HashEvaluator,
+                         sizeFilter: Int => Boolean,
+                         statistics: mutable.Map[Int, Int]): Unit = {
+        val btable = data.sparkContext.broadcast(table)
+        val grouped = data.map({ case (id, point) => (btable.value.hash(point, radius), (id, point)) })
+            .groupByKey
+
+        grouped
+            .filter { case (_, it) => sizeFilter(it.size) }
+            .map { case (_, it) => (it.size, 1) }
+            .reduceByKey((count1, count2) => count1 + count2) // Se cuentan los buckets con el mismo número de puntos
+            .collect()
+            .foreach { case (numPoints, count) =>
+                Utils.addOrUpdate(statistics, numPoints, count, (prev: Int) => prev + count)
+            }
+    }
+
+    def getRemaining(data: RDD[(Long, Vector)],
+                     radius: Double, table: HashEvaluator,
+                     sizeFilter: Int => Boolean): RDD[(HashPoint, Iterable[(Long, Vector)])] = {
+        val btable = data.sparkContext.broadcast(table)
+        val grouped = data.map({ case (id, point) => (btable.value.hash(point, radius), (id, point)) })
+            .groupByKey
+
+        val remaining = grouped
+            .filter { case (_, it) => sizeFilter(it.size) }
+        remaining
     }
 
     def algorithmv1(data: RDD[(Long, Vector)], dimension: Int, desiredSize: Int, baseDirectory: Path, depth: Int = 0): Unit = {
@@ -184,7 +240,7 @@ object SimpleApp {
         }
 
         println("----- Calculando Hasher -----")
-        val (hasher, currentRadius) = time { // 3:45 min
+        val (hasher, hashOptions, currentRadius) = time { // 3:45 min
             Hasher.getHasherForDataset(data, dimension, desiredSize);
         }
         var radius = currentRadius
@@ -241,7 +297,7 @@ object SimpleApp {
     }
 
     def pruebas(data: RDD[(Long, Vector)], dimension: Int, radius: Double, desiredSize: Int): Unit = {
-        val (hasher, radius) = time { // 3:45 min
+        val (hasher, hashOptions, radius) = time { // 3:45 min
             Hasher.getHasherForDataset(data, dimension, desiredSize);
         }
         //Utils.store(baseDirectory.resolve("hasher.data"), (hasher, radius))

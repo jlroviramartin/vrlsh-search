@@ -2,21 +2,22 @@ package org.example
 
 import com.esotericsoftware.kryo.{Kryo, Serializer}
 import com.esotericsoftware.kryo.io.{Input, Output}
-import com.esotericsoftware.kryo.serializers.MapSerializer
+import com.esotericsoftware.kryo.serializers.{MapSerializer, CollectionSerializer}
 import com.twitter.chill.{KryoInstantiator, WrappedArraySerializer, Tuple2Serializer}
 import com.twitter.chill.config.{ConfiguredInstantiator, JavaMapConfig}
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 
 import java.io.{FileInputStream, FileOutputStream, ObjectInputStream, ObjectOutputStream}
 import java.nio.file.Path
+import scala.collection.immutable
 import scala.collection.mutable
-import scala.collection.mutable.WrappedArray
 
 object DataStore {
     val kryo = {
         val kryo: Kryo = new Kryo()
 
         kryo.register(classOf[mutable.WrappedArray.ofRef[Any]], new WrappedArraySerializer[Any])
+        //kryo.register(classOf[immutable.Vector[Any]], new CollectionSerializer)
         kryo.register(classOf[(Any, Any)], new Tuple2Serializer)
         kryo.register(classOf[Vector], VectorSerializer)
         kryo

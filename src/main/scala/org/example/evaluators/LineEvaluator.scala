@@ -18,21 +18,31 @@ class LineEvaluator(val w: Array[Double], val b: Double)
     }
 
     def this(random: Random, dim: Int) = {
+        //this(
+        //    (0 until dim).map(_ => random.nextDouble).toArray,
+        //    random.nextDouble)
         this(
-            (0 until dim).map(_ => random.nextDouble).toArray, // nextGaussian
-            random.nextDouble)
+            (0 until dim).map(_ => random.nextGaussian).toArray,
+            random.nextGaussian)
     }
 
     def this(options: HashOptions) = this(options.random, options.dim);
 
     def dimension: Int = w.length
 
-    def evaluate(point: Vector): Double = evaluate(point, 1)
+
+    //def evaluate(point: Vector): Double = evaluate(point, 1)
 
     def evaluate(point: Vector, radius: Double): Double = {
         assert(point.size == dimension)
         ((0 until dimension).map(i => point(i) * w(i)).sum + b) / radius;
+        //(0 until dimension).map(i => point(i) * w(i)).sum / radius + b;
     }
+
+    def transform(point: Vector): Double = ((0 until dimension).map(i => point(i) * w(i)).sum + b);
+
+    def hashTransformed(transformed: Double, radius: Double): Double = transformed / radius;
+
 
     override def hashCode: Int = w.toSeq.hashCode() ^ b.hashCode()
 

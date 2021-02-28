@@ -10,8 +10,8 @@ import scala.util.Random
 class LineEvaluatorSuite extends AnyFunSuite {
     test("Line evaluator") {
         assertResult(3)(new LineEvaluator(new Random(), 3).dimension);
-        assertResult(6.0)(new LineEvaluator(Array(1.0, 2.0), 3.0).evaluate(Vectors.dense(1.0, 1.0)));
-        assertResult(26.0)(new LineEvaluator(Array(2.0, 3.0), 3.0).evaluate(Vectors.dense(4.0, 5.0)));
+        assertResult(6.0)(new LineEvaluator(Array(1.0, 2.0), 3.0).evaluate(Vectors.dense(1.0, 1.0), 1));
+        assertResult(26.0)(new LineEvaluator(Array(2.0, 3.0), 3.0).evaluate(Vectors.dense(4.0, 5.0), 1));
         assertResult(12.0)(new LineEvaluator(Array(1.0, 2.0), 3.0).evaluate(Vectors.dense(1.0, 1.0), 1 / 2.0));
         assertResult(52.0)(new LineEvaluator(Array(2.0, 3.0), 3.0).evaluate(Vectors.dense(4.0, 5.0), 1 / 2.0));
     }

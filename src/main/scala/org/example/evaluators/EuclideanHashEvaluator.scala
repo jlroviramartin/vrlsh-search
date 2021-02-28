@@ -22,9 +22,17 @@ class EuclideanHashEvaluator(val evaluators: Seq[LineEvaluator])
 
     def dimension: Int = if (evaluators.nonEmpty) evaluators.head.dimension else 0;
 
-    def transform(point: Vector): Vector = Vectors.dense(evaluators.map(evaluator => evaluator.evaluate(point)).toArray);
 
-    def hashTransformed(point: Vector, radius: Double): HashPoint = new HashPoint(point.toArray.map(x => (x / radius).toInt));
+    override def hash(point: Vector, radius: Double): HashPoint =
+        new HashPoint(evaluators.map(evaluator => evaluator.evaluate(point, radius).toInt));
+
+    def transform(point: Vector): Seq[Double] =
+        evaluators.map(evaluator => evaluator.transform(point));
+
+    def hashTransformed(transformed: Seq[Double], radius: Double): HashPoint =
+        new HashPoint(evaluators.zip(transformed)
+            .map { case (evaluator, t) => Math.floor(evaluator.hashTransformed(t, radius)).toInt });
+
 
     override def toString: String = s"keyLength: $keyLength  dimension: $dimension";
 

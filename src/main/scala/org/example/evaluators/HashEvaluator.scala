@@ -7,6 +7,7 @@ import org.apache.spark.rdd.RDD
  * Evaluador de Hash.
  */
 trait HashEvaluator extends Serializable {
+
     def hash(v: Vector, radius: Double): HashPoint;
 
     final def hashData(data: RDD[(Long, Vector)], radius: Double): RDD[(Long, HashPoint)] = {

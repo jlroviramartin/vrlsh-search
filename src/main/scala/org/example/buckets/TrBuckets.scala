@@ -1,10 +1,9 @@
 package org.example.buckets
 
-import org.apache.spark.ml.linalg.Vector
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 
 import scala.collection.mutable
-
-import org.example.evaluators.{HashPoint, TransformHashEvaluator, EuclideanHashEvaluator}
+import org.example.evaluators.{EuclideanHashEvaluator, HashPoint, TransformHashEvaluator}
 import org.example.HashOptions
 
 class TrBuckets(hashEvaluator: TransformHashEvaluator)
@@ -17,16 +16,16 @@ class TrBuckets(hashEvaluator: TransformHashEvaluator)
     }
 
     override def put(point: Vector, resolution: Double): Unit = {
-        val trPoint = hashEvaluator.transform(point);
-        val hash = hashEvaluator.hashTransformed(trPoint, resolution);
+        val transformed = hashEvaluator.transform(point);
+        val hash = hashEvaluator.hashTransformed(transformed, resolution);
 
         map.get(resolution) match {
             case Some(innerMap) => innerMap.get(hash) match {
-                case Some(bucket: TrBucket) => bucket.put(trPoint, point);
+                case Some(bucket: TrBucket) => bucket.put(Vectors.dense(transformed.toArray), point);
                 case Some(bucket: Bucket) => bucket.put(point);
                 case None => {
                     Console.println("Creating bucket " + hash);
-                    innerMap.put(hash, new TrBucket(trPoint, point));
+                    innerMap.put(hash, new TrBucket(Vectors.dense(transformed.toArray), point));
                 }
             }
             case None => {
