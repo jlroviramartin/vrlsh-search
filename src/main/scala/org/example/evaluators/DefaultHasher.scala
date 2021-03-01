@@ -36,6 +36,7 @@ class DefaultHasher(val evaluators: Array[HashEvaluator])
     def hash(point: Vector, radius: Double): Seq[HashPoint] = {
         // Se incluye el índice en el hash
         evaluators.indices.map(index => new HashPoint(evaluators(index).hash(point, radius), index))
+        //evaluators.indices.map(index => evaluators(index).hash(point, radius))
     }
 
     override def toString: String = {

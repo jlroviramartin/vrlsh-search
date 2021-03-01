@@ -1,6 +1,7 @@
 package org.example
 
 import Utils._
+
 import collection._
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.ml.linalg.Vector
@@ -12,6 +13,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.{SparkConf, SparkContext}
 import org.example.buckets.Bucket
+import org.example.construction.KnnConstructionAlgorithm
 import org.example.evaluators.{DefaultHasher, EuclideanHashEvaluator, HashEvaluator, HashPoint, Hasher, LineEvaluator, TransformHashEvaluator}
 
 import java.io.File
@@ -36,8 +38,8 @@ object SimpleApp {
         Utils.quiet_logs()
 
         //val fileToRead = "hdfs://namenode:9000/test.txt"
-        //val fileToRead = "C:\\Users\\joseluis\\OneDrive\\TFM\\dataset\\HIGGS_head_numbered_100000.csv"
-        val fileToRead = "C:\\Users\\joseluis\\OneDrive\\TFM\\dataset\\corel.csv"
+        //val fileToRead = Paths.get("C:", "Users", "joseluis", "OneDrive", "TFM", "dataset", "HIGGS_head_numbered_100000.csv")
+        val fileToRead = Paths.get("C:", "Users", "joseluis", "OneDrive", "TFM", "dataset", "corel.csv")
 
         val baseDirectory = Paths.get("C:", "Temp", "scala")
         Files.createDirectories(baseDirectory)
@@ -52,7 +54,7 @@ object SimpleApp {
         val sc = spark.sparkContext
 
         val data: RDD[(Long, Vector)] = if (true) {
-            sc.textFile(fileToRead)
+            sc.textFile(fileToRead.toString)
                 .map(line => {
                     val args = line.split(',');
                     val id = args(0).toLong;
@@ -60,177 +62,24 @@ object SimpleApp {
                     (id, Vectors.dense(values))
                 })
         } else {
-            MLUtils.loadLibSVMFile(sc, fileToRead)
+            // No funciona ???
+            MLUtils.loadLibSVMFile(sc, fileToRead.toString)
                 .zipWithIndex()
                 .map(_.swap)
                 .map { case (id, labelPoint) => (id, Vectors.dense(labelPoint.features.toArray)) }
         }
 
-        val dimension = data.first()._2.size;
         val desiredSize = 100;
-        val min = desiredSize * Utils.MIN_TOLERANCE;
-        val max = desiredSize * Utils.MAX_TOLERANCE;
-        println(s"desiredSize = $desiredSize tolerance = ($min, $max)")
 
         // Se limpian los datos antiguos
         val directory = new Directory(baseDirectory.resolve("sizes").toFile);
         directory.deleteRecursively();
 
-        new KnnConstructionAlgorithm1(desiredSize, baseDirectory).build(data)
-        //algorithmv2(data, dimension, desiredSize, baseDirectory)
-
+        time {
+            //new KnnConstructionAlgorithm1(desiredSize, baseDirectory).build(data)
+            new KnnConstructionAlgorithm(desiredSize, baseDirectory.toString).build(data)
+        }
         spark.stop()
-    }
-
-    def algorithmv2(data: RDD[(Long, Vector)],
-                    dimension: Int,
-                    desiredSize: Int,
-                    baseDirectory: Path): Unit = {
-
-        println("----- Calculando el Hasher -----")
-        val file = baseDirectory.resolve("hasher.data")
-
-        val evaluate = true;
-
-        val (hasher, hashOptions, radius) = if (evaluate) {
-            val (a, b, c) = time {
-                Hasher.getHasherForDataset(data, dimension, desiredSize)
-            } // 3:45 min
-            //iDataStore.kstore(file, (a, b, c))
-            (a, b, c)
-        } else {
-            DataStore.kload(file, classOf[(Hasher, HashOptions, Double)])
-        }
-
-        println("----- Iterando por las tablas -----")
-        var numTable = 1;
-        for (table <- hasher.tables) {
-            println(s"Tabla: $numTable")
-            algorithmv2(data, radius, table, hashOptions, desiredSize, baseDirectory);
-
-            numTable = numTable + 1
-        }
-    }
-
-    def algorithmv2(data: RDD[(Long, Vector)],
-                    radius: Double,
-                    table: HashEvaluator,
-                    hashOptions: HashOptions,
-                    desiredSize: Int,
-                    baseDirectory: Path): Unit = {
-
-        val min = desiredSize * Utils.MIN_TOLERANCE;
-        val max = desiredSize * Utils.MAX_TOLERANCE;
-
-        var currentTable = table
-
-        var currentData = data
-        var currentRadius = radius
-        var iteration = 0
-
-        val statistics = collection.mutable.Map[Int, Int]();
-
-        var end = false;
-        while (!end) {
-            println(s"Iteración : $iteration")
-
-            /*println("    Almacena los buckets")
-            storeBuckets(currentData,
-                currentRadius, table,
-                (size: Int) => size >= min && size <= max,
-                baseDirectory)*/
-
-            println("    Estadísticas");
-            updateStatistics(currentData,
-                currentRadius, currentTable,
-                (size: Int) => size >= min && size <= max,
-                statistics);
-
-            val remaining = getRemaining(currentData,
-                currentRadius, currentTable,
-                (size: Int) => size < min || size > max)
-
-            if (remaining.isEmpty()) {
-                println("    Vacio!")
-
-                end = true
-            }
-            else if (Utils.forAll(remaining)({ case (hash, _) => Utils.isBaseHashPoint(hash) })) {
-                println("    Todos son BASE!")
-
-                val remainingData = remaining.flatMap { case (_, it) => it }
-
-                // DEBUG
-                println(s"    Puntos restantes = ${remainingData.count}")
-
-                updateStatistics(remainingData,
-                    currentRadius, currentTable,
-                    _ => true,
-                    statistics)
-
-                end = true
-            }
-            else {
-                currentData = remaining.flatMap { case (_, it) => it }
-                currentRadius = currentRadius * 1.2
-                iteration = iteration + 1
-
-                //currentTable = hashOptions.newHashEvaluator()
-
-                // DEBUG
-                println(s"    Puntos restantes = ${currentData.count}")
-            }
-        }
-
-        println("    Estadísticas: Número de puntos - Número de buckets");
-        statistics.toSeq.sortBy(_._1).foreach { case (numPoints, count) => {
-            println(s"$numPoints - $count")
-        }
-        }
-    }
-
-    def storeBuckets(data: RDD[(Long, Vector)],
-                     radius: Double, table: HashEvaluator,
-                     sizeFilter: Int => Boolean,
-                     baseDirectory: Path): Unit = {
-        val btable = data.sparkContext.broadcast(table)
-        val grouped = data.map({ case (id, point) => (btable.value.hash(point, radius), (id, point)) })
-            .groupByKey
-
-        grouped
-            .filter { case (_, it) => sizeFilter(it.size) }
-            .map { case (hash, it) => (hash, new Bucket(it.map { case (_, point) => point })) }
-            .foreach { case (hash, bucket) => bucket.store(radius, hash, baseDirectory) }
-    }
-
-    def updateStatistics(data: RDD[(Long, Vector)],
-                         radius: Double, table: HashEvaluator,
-                         sizeFilter: Int => Boolean,
-                         statistics: mutable.Map[Int, Int]): Unit = {
-        val btable = data.sparkContext.broadcast(table)
-        val grouped = data.map({ case (id, point) => (btable.value.hash(point, radius), (id, point)) })
-            .groupByKey
-
-        grouped
-            .filter { case (_, it) => sizeFilter(it.size) }
-            .map { case (_, it) => (it.size, 1) }
-            .reduceByKey((count1, count2) => count1 + count2) // Se cuentan los buckets con el mismo número de puntos
-            .collect()
-            .foreach { case (numPoints, count) =>
-                Utils.addOrUpdate(statistics, numPoints, count, (prev: Int) => prev + count)
-            }
-    }
-
-    def getRemaining(data: RDD[(Long, Vector)],
-                     radius: Double, table: HashEvaluator,
-                     sizeFilter: Int => Boolean): RDD[(HashPoint, Iterable[(Long, Vector)])] = {
-        val btable = data.sparkContext.broadcast(table)
-        val grouped = data.map({ case (id, point) => (btable.value.hash(point, radius), (id, point)) })
-            .groupByKey
-
-        val remaining = grouped
-            .filter { case (_, it) => sizeFilter(it.size) }
-        remaining
     }
 
     def algorithmv1(data: RDD[(Long, Vector)], dimension: Int, desiredSize: Int, baseDirectory: Path, depth: Int = 0): Unit = {
@@ -368,29 +217,5 @@ object SimpleApp {
         //bucketData
         //    .filter { case (_, bucket) => !equalsWithTolerance(bucket.size, desiredSize) }
         //    .saveAsTextFile("C:\\Temp\\OTHER_" + radius)
-    }
-}
-
-class Aggregator[T](var count: Int = 0, var values: Set[T] = Set[T]()) extends Serializable
-
-object Aggregator {
-    def zero[T] = new Aggregator[T](0, Set[T]())
-
-    def add[T](agg: Aggregator[T], values: Traversable[T]) = {
-        for (c <- values)
-            agg.values += c
-        agg
-    }
-
-    def addSample[T](agg: Aggregator[T], value: T) = {
-        agg.count += 1
-        add(agg, List(value))
-        agg
-    }
-
-    def merge[T](agg: Aggregator[T], other: Aggregator[T]) = {
-        agg.count += other.count
-        add(agg, other.values)
-        agg
     }
 }
