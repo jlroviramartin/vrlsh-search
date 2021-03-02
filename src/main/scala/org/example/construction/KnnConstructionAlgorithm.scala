@@ -4,7 +4,7 @@ import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.rdd.RDD
 import org.example.Utils
 import org.example.Utils.time
-import org.example.evaluators.{HashPoint, Hasher}
+import org.example.evaluators.{Hash, Hasher}
 
 import scala.collection.{Iterable, mutable}
 
@@ -115,7 +115,7 @@ class KnnConstructionAlgorithm(val desiredSize: Int,
     }
 
     def groupByHasher(hashedData: RDD[(Int, Long, Vector)],
-                      radius: Double, hasher: Hasher): RDD[((Int, HashPoint), Iterable[(Long, Vector)])] = {
+                      radius: Double, hasher: Hasher): RDD[((Int, Hash), Iterable[(Long, Vector)])] = {
         val bhasher = hashedData.sparkContext.broadcast(hasher)
         val grouped = hashedData.map { case (tableIndex, id, point) => ((tableIndex, bhasher.value.hash(tableIndex, point, radius)), (id, point)) }
             .groupByKey()
@@ -139,7 +139,7 @@ class KnnConstructionAlgorithm(val desiredSize: Int,
 
     def getRemaining(hashedData: RDD[(Int, Long, Vector)],
                      radius: Double, hasher: Hasher,
-                     sizeFilter: Int => Boolean): RDD[((Int, HashPoint), Iterable[(Long, Vector)])] = {
+                     sizeFilter: Int => Boolean): RDD[((Int, Hash), Iterable[(Long, Vector)])] = {
 
         groupByHasher(hashedData, radius, hasher)
             .filter { case (_, it) => sizeFilter(it.size) }

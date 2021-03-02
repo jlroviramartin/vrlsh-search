@@ -23,13 +23,13 @@ class EuclideanHashEvaluator(val evaluators: Seq[LineEvaluator])
     def dimension: Int = if (evaluators.nonEmpty) evaluators.head.dimension else 0;
 
 
-    override def hash(point: Vector, radius: Double): HashPoint =
+    override def hash(point: Vector, radius: Double): Hash =
         new HashPoint(evaluators.map(evaluator => evaluator.evaluate(point, radius).toInt));
 
     def transform(point: Vector): Seq[Double] =
         evaluators.map(evaluator => evaluator.transform(point));
 
-    def hashTransformed(transformed: Seq[Double], radius: Double): HashPoint =
+    def hashTransformed(transformed: Seq[Double], radius: Double): Hash =
         new HashPoint(evaluators.zip(transformed)
             .map { case (evaluator, t) => Math.floor(evaluator.hashTransformed(t, radius)).toInt });
 

@@ -4,10 +4,10 @@ import org.apache.spark.ml.linalg.Vector
 
 import scala.collection.{Iterable, mutable}
 
-import org.example.evaluators.{HashEvaluator, HashPoint}
+import org.example.evaluators.{HashEvaluator, Hash}
 
 class Buckets(val hashEvaluator: HashEvaluator,
-              val map: mutable.Map[Double, mutable.Map[HashPoint, Bucket]])
+              val map: mutable.Map[Double, mutable.Map[Hash, Bucket]])
     extends Serializable {
 
     def put(point: Vector, resolution: Double): Unit = {
@@ -22,7 +22,7 @@ class Buckets(val hashEvaluator: HashEvaluator,
         }
     }
 
-    def getBuckets(resolution: Double): Iterable[(HashPoint, Bucket)] = {
+    def getBuckets(resolution: Double): Iterable[(Hash, Bucket)] = {
         map.get(resolution) match {
             case Some(map) => map
             case None => Iterable.empty

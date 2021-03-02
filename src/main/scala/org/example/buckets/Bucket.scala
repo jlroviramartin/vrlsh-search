@@ -2,7 +2,7 @@ package org.example.buckets
 
 import scala.collection.mutable.TreeMap
 import org.apache.spark.ml.linalg.Vector
-import org.example.evaluators.HashPoint
+import org.example.evaluators.{Hash, HashPoint, HashWithIndex}
 
 import scala.collection.Iterable
 import scala.collection.mutable.ArrayBuffer
@@ -43,11 +43,11 @@ class Bucket(val envelope: EnvelopeDoubleBuffer,
         buff.toString()
     }
 
-    def store(radius: Double, hash: HashPoint, baseDirectory: Path): Unit = {
+    def store(radius: Double, hash: Hash, baseDirectory: Path): Unit = {
         var realDirectory = baseDirectory
 
         realDirectory = realDirectory.resolve(radius.toString)
-        hash.values.foreach(value => realDirectory = realDirectory.resolve(value.toString))
+        HashPoint.get(hash).values.foreach(value => realDirectory = realDirectory.resolve(value.toString))
         Files.createDirectories(realDirectory)
 
         DataStore.store(realDirectory.resolve("bucket.data"), this)
@@ -56,11 +56,11 @@ class Bucket(val envelope: EnvelopeDoubleBuffer,
 
 object Bucket {
 
-    def load(radius: Double,hash: HashPoint, baseDirectory: Path): Option[Bucket] = {
+    def load(radius: Double, hash: Hash, baseDirectory: Path): Option[Bucket] = {
         var realDirectory = baseDirectory
 
         realDirectory = realDirectory.resolve(radius.toString)
-        hash.values.foreach(value => realDirectory = realDirectory.resolve(value.toString))
+        HashPoint.get(hash).values.foreach(value => realDirectory = realDirectory.resolve(value.toString))
         if (!Files.exists(realDirectory.resolve("bucket.data"))) {
             return Option.empty
         }

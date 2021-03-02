@@ -4,7 +4,7 @@ import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.rdd.RDD
 import org.example.Utils.time
 import org.example.buckets.Bucket
-import org.example.evaluators.{HashEvaluator, HashPoint, Hasher}
+import org.example.evaluators.{HashEvaluator, Hash, Hasher}
 import org.example.{HashOptions, Utils}
 
 import java.nio.file.Path
@@ -142,7 +142,7 @@ class KnnConstructionAlgorithmOLD(val desiredSize: Int,
 
     def getRemaining(data: RDD[(Long, Vector)],
                      radius: Double, table: HashEvaluator,
-                     sizeFilter: Int => Boolean): RDD[(HashPoint, Iterable[(Long, Vector)])] = {
+                     sizeFilter: Int => Boolean): RDD[(Hash, Iterable[(Long, Vector)])] = {
         val btable = data.sparkContext.broadcast(table)
         val grouped = data.map({ case (id, point) => (btable.value.hash(point, radius), (id, point)) })
             .groupByKey

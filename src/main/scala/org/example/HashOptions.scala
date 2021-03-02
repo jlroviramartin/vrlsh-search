@@ -1,7 +1,7 @@
 package org.example
 
 import org.example.buckets.TrBuckets
-import org.example.evaluators.{DefaultHasher, EuclideanHashEvaluator, HashEvaluator, Hasher, TransformHashEvaluator}
+import org.example.evaluators.{DefaultHasher, EuclideanHashEvaluator, EuclideanHasher, HashEvaluator, Hasher, TransformHashEvaluator}
 
 import scala.util.Random
 
@@ -13,7 +13,7 @@ class HashOptions(val random: Random,
 
     def this(dim: Int, keyLength: Int, numTables: Int) = this(new Random(0), dim, keyLength, numTables);
 
-    def newHasher(): Hasher = new DefaultHasher(this);
+    def newHasher(): Hasher = new EuclideanHasher() //new DefaultHasher(this);
 
     def newHashEvaluator(): HashEvaluator = new EuclideanHashEvaluator(this);
 

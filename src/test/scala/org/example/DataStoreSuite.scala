@@ -2,7 +2,7 @@ package org.example
 
 import org.apache.spark.ml.linalg.Vectors
 import org.example.buckets.Bucket
-import org.example.evaluators.{DefaultHasher, EuclideanHashEvaluator, HashPoint, LineEvaluator}
+import org.example.evaluators.{DefaultHasher, EuclideanHashEvaluator, Hash, HashPoint, LineEvaluator}
 import org.scalatest.funsuite.AnyFunSuite
 
 import java.nio.file.Files
@@ -20,7 +20,7 @@ class DataStoreSuite extends AnyFunSuite {
 
         val source = new HashPoint(1, 2, 3)
         DataStore.store(file, source)
-        val ret = DataStore.load[HashPoint](file)
+        val ret = DataStore.load[Hash](file)
 
         assertResult(source)(ret)
     }
@@ -38,7 +38,7 @@ class DataStoreSuite extends AnyFunSuite {
         val source = new HashPoint(1, 2, 3)
 
         DataStore.kstore(file, source)
-        val ret = DataStore.kload(file, classOf[HashPoint])
+        val ret = DataStore.kload(file, classOf[Hash])
 
         assertResult(source)(ret)
     }

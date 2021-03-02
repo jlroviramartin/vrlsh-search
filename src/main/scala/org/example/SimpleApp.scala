@@ -14,7 +14,7 @@ import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.{SparkConf, SparkContext}
 import org.example.buckets.Bucket
 import org.example.construction.KnnConstructionAlgorithm
-import org.example.evaluators.{DefaultHasher, EuclideanHashEvaluator, HashEvaluator, HashPoint, Hasher, LineEvaluator, TransformHashEvaluator}
+import org.example.evaluators.{DefaultHasher, EuclideanHashEvaluator, HashEvaluator, Hash, Hasher, LineEvaluator, TransformHashEvaluator}
 
 import java.io.File
 import java.nio.file.{Files, Path, Paths}
@@ -76,7 +76,6 @@ object SimpleApp {
         directory.deleteRecursively();
 
         time {
-            //new KnnConstructionAlgorithm1(desiredSize, baseDirectory).build(data)
             new KnnConstructionAlgorithm(desiredSize, baseDirectory.toString).build(data)
         }
         spark.stop()

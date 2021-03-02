@@ -1,12 +1,9 @@
 package org.example.evaluators
 
 import org.apache.spark.ml.linalg.Vector
-import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.rdd.RDD
 import org.apache.spark.internal.Logging
 import org.example.{HashOptions, Utils}
-
-import scala.util.Random
 
 @SerialVersionUID(-4061941561292649692l)
 trait Hasher extends Serializable {
@@ -15,24 +12,32 @@ trait Hasher extends Serializable {
      * <br>
      * Nota: los hash están indexados según el índice de tabla.
      */
-    def hash(point: Vector, radius: Double): Seq[HashPoint];
+    def hash(point: Vector, radius: Double): Seq[Hash];
 
     def numTables: Int;
 
-    def hash(tableIndex: Int, point: Vector, radius: Double): HashPoint;
+    def hash(tableIndex: Int, point: Vector, radius: Double): Hash;
 
-    def tables: Seq[HashEvaluator]
+    //def tables: Seq[HashEvaluator]
 
     /**
      * (data: RDD[(id: Long, point: Vector)], radius: Double) -> RDD[(id: Long, hash: HashPoint)]
      * <br>
      * Para cada indice+punto, calcula todos los hashes del punto y los devuelve.
      */
-    final def hashData(data: RDD[(Long, Vector)], radius: Double): RDD[(Long, HashPoint)] = {
+    final def hashData(data: RDD[(Long, Vector)], radius: Double): RDD[(Long, Hash)] = {
         val t = this
         val bt = data.sparkContext.broadcast(t)
 
-        data.flatMap({ case (id, point) => bt.value.hash(point, radius).map(hash => (id, hash)) });
+        //data.flatMap({ case (id, point) => bt.value
+        //    .hash(point, radius)
+        //    .zipWithIndex
+        //    .map { case (hash, i) => (id, new HashWithIndex(i, hash)) }
+        //});
+        data.flatMap({ case (id, point) => bt.value
+            .hash(point, radius)
+            .map(hash => (id, hash))
+        });
     }
 
     /**
@@ -40,7 +45,7 @@ trait Hasher extends Serializable {
      * <br>
      * Para cada indice+punto, calcula todos los hashes del punto y los devuelve.
      */
-    final def hashDataWithVectors(data: RDD[(Long, Vector)], radius: Double): RDD[(HashPoint, (Long, Vector))] = {
+    final def hashDataWithVectors(data: RDD[(Long, Vector)], radius: Double): RDD[(Hash, (Long, Vector))] = {
         val t = this
         val bt = data.sparkContext.broadcast(t)
 
@@ -53,7 +58,7 @@ trait Hasher extends Serializable {
      * Número de puntos por hash.
      */
     final def sizesByHash(data: RDD[(Long, Vector)],
-                          radius: Double): RDD[(HashPoint, Int)] = {
+                          radius: Double): RDD[(Hash, Int)] = {
 
         this.hashData(data, radius) // (id, point) -> (id, hash)
             .map(_.swap) // (id, hash) -> (hash, id)

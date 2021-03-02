@@ -1,7 +1,7 @@
 package org.example
 
 import org.apache.spark.ml.linalg.Vectors
-import org.example.evaluators.{DefaultHasher, EuclideanHashEvaluator, HashEvaluator, HashPoint, LineEvaluator}
+import org.example.evaluators.{DefaultHasher, EuclideanHashEvaluator, HashEvaluator, Hash, HashPoint, LineEvaluator}
 import org.scalatest.funsuite.AnyFunSuite
 
 class EuclideanHashEvaluatorSuite extends AnyFunSuite {

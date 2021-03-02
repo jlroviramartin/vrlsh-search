@@ -6,6 +6,7 @@ import java.util.concurrent.TimeUnit
 import scala.util.control.NonFatal
 import org.apache.log4j.{Level, Logger}
 import org.apache.spark.rdd.RDD
+import org.example.evaluators.Hash
 import org.example.evaluators.HashPoint
 
 object Utils {
@@ -47,8 +48,9 @@ object Utils {
     /**
      * Todas los valores excepto el último (representa el indice) están en [-1, 1).
      */
-    def isBaseHashPoint(hash: HashPoint): Boolean = {
-        (0 until hash.values.size - 1).map(i => hash.values(i)).forall(value => value >= -1 && value < 1)
+    def isBaseHashPoint(hash: Hash): Boolean = {
+        HashPoint.get(hash).values.forall(value => value >= -1 && value < 1)
+        //(0 until hash.values.size - 1).map(i => hash.values(i)).forall(value => value >= -1 && value < 1)
     }
 
     // all()

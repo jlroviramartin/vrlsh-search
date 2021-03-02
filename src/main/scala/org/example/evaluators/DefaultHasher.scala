@@ -3,7 +3,9 @@ package org.example.evaluators
 import org.example.HashOptions
 
 import scala.util.Random
-import org.apache.spark.ml.linalg.Vector
+import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector}
+
+import scala.Array.ofDim
 
 class DefaultHasher(val evaluators: Array[HashEvaluator])
     extends Hasher {
@@ -13,7 +15,7 @@ class DefaultHasher(val evaluators: Array[HashEvaluator])
     def this(evaluators: HashEvaluator*) = this(evaluators.toArray);
 
     def this(random: Random, dim: Int, keyLength: Int, numTables: Int) = {
-        this((0 until numTables).map(_ => new EuclideanHashEvaluator(random, dim, keyLength).asInstanceOf[HashEvaluator]).toArray);
+        this((0 until numTables).map(_ => new EuclideanHashEvaluator(random, dim, keyLength)).toArray[HashEvaluator]);
     }
 
     def this(options: HashOptions) = {
@@ -22,21 +24,24 @@ class DefaultHasher(val evaluators: Array[HashEvaluator])
 
     def numTables: Int = evaluators.length;
 
-    def hash(tableIndex: Int, point: Vector, radius: Double): HashPoint = {
+    def hash(tableIndex: Int, point: Vector, radius: Double): Hash = {
         // Se incluye el índice en el hash
-        new HashPoint(evaluators(tableIndex).hash(point, radius), tableIndex)
+        //new Hash(evaluators(tableIndex).hash(point, radius), tableIndex)
+        //evaluators(tableIndex).hash(point, radius)
+        new HashWithIndex(tableIndex, evaluators(tableIndex).hash(point, radius))
     }
 
-    def tables: Seq[HashEvaluator] = evaluators
+    //def tables: Seq[HashEvaluator] = evaluators
 
     private def firstHashEvaluator: Option[HashEvaluator] = evaluators.headOption;
 
     //def keyLength: Int = if (evaluators.nonEmpty) evaluators.head else 0;
 
-    def hash(point: Vector, radius: Double): Seq[HashPoint] = {
+    def hash(point: Vector, radius: Double): Seq[Hash] = {
         // Se incluye el índice en el hash
-        evaluators.indices.map(index => new HashPoint(evaluators(index).hash(point, radius), index))
+        //evaluators.indices.map(index => new HashPoint(evaluators(index).hash(point, radius), index))
         //evaluators.indices.map(index => evaluators(index).hash(point, radius))
+        evaluators.indices.map(index => new HashWithIndex(index, evaluators(index).hash(point, radius)))
     }
 
     override def toString: String = {
@@ -51,4 +56,56 @@ class DefaultHasher(val evaluators: Array[HashEvaluator])
             case _ => false
         }
     }
+}
+
+class EuclideanHasher(val table: Array[Array[Array[Double]]],
+                      val b: Array[Array[Double]],
+                      val numTables: Int,
+                      val keyLength: Int,
+                      val dimension: Int)
+    extends Hasher {
+
+    def this(options: HashOptions) = {
+        this(ofDim[Double](numTables, options.keyLength, options.dim),
+            ofDim[Double](numTables, options.keyLength),
+            options.numTables, options.keyLength, options.dim);
+
+        for (i <- 0 until numTables)
+            for (j <- 0 until options.keyLength) {
+                for (k <- 0 until options.dim)
+                    table(i)(j)(k) = options.random.nextGaussian
+                //b(i)(j)=randomGenerator.nextDouble*w //This was too large in comparison with standardized data being dot producted with the gaussian vectors.
+                b(i)(j) = options.random.nextGaussian
+            }
+    }
+
+    override def hash(point: Vector, radius: Double): Seq[Hash] = {
+        (0 until numTables).map(index => { hash(index, point, radius) })
+    }
+
+    override def hash(tableIndex: Int, point: Vector, radius: Double): Hash = {
+        val hash = (0 until keyLength).map(j => {
+            var dotProd = 0.0
+
+            point match {
+                case dense: DenseVector => {
+                    for (k <- 0 until dimension)
+                        dotProd += dense(k) * table(tableIndex)(j)(k)
+                }
+                case sparse: SparseVector => { //SparseVector
+                    val indices = sparse.indices
+                    val values = sparse.values
+
+                    for (k <- 0 until indices.length) {
+                        dotProd += values(k) * table(tableIndex)(j)(indices(k))
+                    }
+                }
+            }
+            //dotProd /= radius
+            math.floor((dotProd + b(tableIndex)(j)) / radius).toInt
+        }).toArray
+        new HashWithIndex(tableIndex, new HashPoint(hash))
+    }
+
+    //override def tables: Seq[HashEvaluator] =
 }
