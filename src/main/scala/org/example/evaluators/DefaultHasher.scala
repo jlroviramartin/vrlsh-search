@@ -38,10 +38,7 @@ class DefaultHasher(val evaluators: Array[HashEvaluator])
     //def keyLength: Int = if (evaluators.nonEmpty) evaluators.head else 0;
 
     def hash(point: Vector, radius: Double): Seq[Hash] = {
-        // Se incluye el índice en el hash
-        //evaluators.indices.map(index => new HashPoint(evaluators(index).hash(point, radius), index))
-        //evaluators.indices.map(index => evaluators(index).hash(point, radius))
-        evaluators.indices.map(index => new HashWithIndex(index, evaluators(index).hash(point, radius)))
+        evaluators.indices.map(index => hash(index, point, radius))
     }
 
     override def toString: String = {
@@ -66,21 +63,22 @@ class EuclideanHasher(val table: Array[Array[Array[Double]]],
     extends Hasher {
 
     def this(options: HashOptions) = {
-        this(ofDim[Double](numTables, options.keyLength, options.dim),
-            ofDim[Double](numTables, options.keyLength),
+        this(ofDim[Double](options.numTables, options.keyLength, options.dim),
+            ofDim[Double](options.numTables, options.keyLength),
             options.numTables, options.keyLength, options.dim);
 
         for (i <- 0 until numTables)
             for (j <- 0 until options.keyLength) {
                 for (k <- 0 until options.dim)
                     table(i)(j)(k) = options.random.nextGaussian
-                //b(i)(j)=randomGenerator.nextDouble*w //This was too large in comparison with standardized data being dot producted with the gaussian vectors.
                 b(i)(j) = options.random.nextGaussian
             }
     }
 
     override def hash(point: Vector, radius: Double): Seq[Hash] = {
-        (0 until numTables).map(index => { hash(index, point, radius) })
+        (0 until numTables).map(index => {
+            hash(index, point, radius)
+        })
     }
 
     override def hash(tableIndex: Int, point: Vector, radius: Double): Hash = {

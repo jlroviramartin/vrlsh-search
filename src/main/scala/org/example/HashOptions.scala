@@ -13,7 +13,7 @@ class HashOptions(val random: Random,
 
     def this(dim: Int, keyLength: Int, numTables: Int) = this(new Random(0), dim, keyLength, numTables);
 
-    def newHasher(): Hasher = new EuclideanHasher() //new DefaultHasher(this);
+    def newHasher(): Hasher = new EuclideanHasher(this) //new DefaultHasher(this);
 
     def newHashEvaluator(): HashEvaluator = new EuclideanHashEvaluator(this);
 

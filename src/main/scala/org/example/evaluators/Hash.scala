@@ -42,6 +42,13 @@ object HashPoint {
             case hash: HashWithIndex => get(hash.hash)
         }
     }
+
+    def getIndex(hash: Hash): Int = {
+        hash match {
+            case hash: HashPoint => throw new Error()
+            case hash: HashWithIndex => hash.index
+        }
+    }
 }
 
 class HashWithIndex(val index: Int, val hash: Hash)
