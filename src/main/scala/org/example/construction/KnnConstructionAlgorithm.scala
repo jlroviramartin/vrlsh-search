@@ -21,12 +21,14 @@ class KnnConstructionAlgorithm(val desiredSize: Int,
 
         val dimension = data.first()._2.size;
 
-        val (hasher, hashOptions, radius) = time(s"desiredSize = $desiredSize tolerance = ($min, $max) - ") {
+        val (hasher, hashOptions, radius) = time(s"desiredSize = $desiredSize tolerance = ($min, $max)") {
             Hasher.getHasherForDataset(data, dimension, desiredSize)
         } // 2 min
 
         val sc = data.sparkContext
-        val bhasher = sc.broadcast(hasher)
+        var bhasher = sc.broadcast(hasher)
+        var bsetToFilter: Broadcast[Set[(Hash)]] = null
+        var bsetBases: Broadcast[Set[(Int)]] = null
 
         val numTables = hasher.numTables
 
@@ -46,43 +48,57 @@ class KnnConstructionAlgorithm(val desiredSize: Int,
             // Condición para formar un bucket. Aquellos que no la cumplan van a la siguiente ronda.
             val bucketCondition = (size: Int) => size >= min && size <= max
 
-            val setToFilter = time("    Se calculan los hash - ") {
+            val setToFilter = time("    Se calculan los hash") {
                 filterHashes(currentData,
                     radius,
                     bhasher,
                     bucketCondition)
             }
-            val bsetToFilter = sc.broadcast(setToFilter)
 
-            time("    Se actualizan las estadísticas - ") {
+            //if (bsetToFilter != null) bsetToFilter.destroy()
+            bsetToFilter = sc.broadcast(setToFilter)
+
+            time("    Se actualizan las estadísticas") {
                 updateStatistics(currentData,
-                    currentRadius, bhasher,
+                    currentRadius,
+                    bhasher,
                     bsetToFilter,
                     statistics)
             }
 
-            val remaining = getRemaining(currentData,
-                currentRadius, bhasher,
-                bsetToFilter)
-
-            val setBases = findBases(remaining)
-            val bsetBases = sc.broadcast(setBases)
-
-            updateStatisticsForBases(remaining.map(x => (x._1._1, x._2._1, x._2._2)),
-                radius,
-                bhasher,
-                bsetBases,
-                statistics)
-
-            currentData = removeBases(remaining.map(x => (x._1._1, x._2._1, x._2._2)))
-
-
-            val empty = time("    Comprobando si no hay puntos - ") {
-                remaining.take(1).length == 0
+            val remaining = time("    getRemaining") {
+                getRemaining(currentData,
+                    currentRadius,
+                    bhasher,
+                    bsetToFilter)
             }
 
-            // Se libera
-            bsetToFilter.destroy()
+            val setBases = time("    findBases") {
+                findBases(remaining)
+            }
+
+            if (!setBases.isEmpty) {
+                //if (bsetBases != null) bsetBases.destroy()
+                bsetBases = sc.broadcast(setBases)
+
+                time("    Se actualizan las estadísticas para las bases") {
+                    updateStatisticsForBases(remaining.map { case ((numTable, hash), (id, point)) => (numTable, id, point) },
+                        radius,
+                        bhasher,
+                        bsetBases,
+                        statistics)
+                }
+
+                currentData = time("    Se eliminan las bases") {
+                    removeBases(remaining.map { case ((numTable, hash), (id, point)) => (numTable, id, point) }, bsetBases)
+                }
+            } else {
+                currentData = remaining.map { case ((numTable, hash), (id, point)) => (numTable, id, point) }
+            }
+
+            val empty = time("    Comprobando si no hay puntos") {
+                currentData.take(1).length == 0
+            }
 
             if (empty) {
                 println("    Vacío!")
@@ -90,46 +106,19 @@ class KnnConstructionAlgorithm(val desiredSize: Int,
                 end = true
             }
             else {
-                // NOTA se calcula por tabla!!!!!!!!!!!
+                currentRadius = currentRadius * radiusMultiplier
+                iteration = iteration + 1
 
-                val onlyBases = time("    Comprobando si todos los buckets son Base - ") {
-                    Utils.forAll(remaining)({ case ((_, hash), _) => Utils.isBaseHashPoint(hash) })
-                }
-
-                currentData = time("    Calculando los puntos restantes - ") {
-                    remaining.map { case ((tableIndex, hash), (id, point)) => (tableIndex, id, point) }
-                }
-
-                // DEBUG
-                /*val numPuntos = time("    Calculando el número TOTAL de puntos para TODAS las tabla (DEBUG) - ") {
-                    currentData.count
-                }
-
-                println(s"    Puntos restantes = $numPuntos")*/
-
-                if (onlyBases) {
-                    println("    Todos son BASE!")
-
-                    time("    Se actualizan las estadísticas") {
-                        updateStatisticsWithoutFilter(currentData,
-                            currentRadius,
-                            bhasher,
-                            statistics)
-                    }
-
-                    end = true
-                }
-                else {
-                    currentRadius = currentRadius * radiusMultiplier
-                    iteration = iteration + 1
-
-                    //currentTable = hashOptions.newHashEvaluator()
-                }
+                //currentTable = hashOptions.newHashEvaluator()
             }
 
             println("    Estadísticas: Número de puntos - Número de buckets");
             showStatistics(statistics)
         }
+
+        if (bsetToFilter != null) bsetToFilter.destroy()
+        if (bsetBases != null) bsetBases.destroy()
+        if (bhasher != null) bhasher.destroy()
     }
 
     def showStatistics(statistics: mutable.Map[Int, Int]): Unit = {
@@ -210,7 +199,7 @@ class KnnConstructionAlgorithm(val desiredSize: Int,
     }
 
     def removeBases(data: RDD[(Int, Long, Vector)],
-                    bsetBases: Broadcast[Set[Int]]): Unit = {
+                    bsetBases: Broadcast[Set[Int]]): RDD[(Int, Long, Vector)] = {
 
         data.filter { case (numTable, id, point) => !bsetBases.value.contains(numTable) }
     }
@@ -233,6 +222,6 @@ class KnnConstructionAlgorithm(val desiredSize: Int,
             .map { case (numTable, isBase) => numTable }
             .distinct()
             .collect()
-            .toSet()
+            .toSet
     }
 }

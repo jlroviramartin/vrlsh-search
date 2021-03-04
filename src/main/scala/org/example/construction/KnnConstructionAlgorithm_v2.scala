@@ -26,7 +26,8 @@ class KnnConstructionAlgorithm_v2(val desiredSize: Int,
 
         val numTables = hasher.numTables
 
-        var currentData = data.flatMap { case (id, point) => (0 until numTables).map(tableIndex => (tableIndex, id, point)) }
+        //var currentData = data.flatMap { case (id, point) => (0 until numTables).map(tableIndex => (tableIndex, id, point)) }
+        var currentData = data.flatMap { case (id, point) => (0 until 1).map(tableIndex => (tableIndex, id, point)) }
         var currentRadius = radius
         var iteration = 0
 
