@@ -3,7 +3,7 @@ package org.example.construction
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.rdd.RDD
-import org.example.Utils
+import org.example.{BroadcastLookupProvider, HashOptions, LookupProvider, Utils}
 import org.example.Utils.time
 import org.example.evaluators.{Hash, HashPoint, Hasher}
 
@@ -15,105 +15,112 @@ class KnnConstructionAlgorithm(val desiredSize: Int,
 
     val min = desiredSize * Utils.MIN_TOLERANCE;
     val max = desiredSize * Utils.MAX_TOLERANCE;
-    val radiusMultiplier = 1.2;
+    val radiusMultiplier = 1.4;
 
     override def build(data: RDD[(Long, Vector)]): Unit = {
 
         val dimension = data.first()._2.size;
 
-        val (hasher, hashOptions, radius) = time(s"desiredSize = $desiredSize tolerance = ($min, $max)") {
-            Hasher.getHasherForDataset(data, dimension, desiredSize)
-        } // 2 min
+        //val (hasher, hashOptions, radius) = time(s"desiredSize = $desiredSize tolerance = ($min, $max)") {
+        //    Hasher.getHasherForDataset(data, dimension, desiredSize)
+        //} // 2 min
+        val radius = 0.1
+        val hasher = new HashOptions(dimension, 16, 14).newHasher()
 
         val sc = data.sparkContext
         var bhasher = sc.broadcast(hasher)
         var bsetToFilter: Broadcast[Set[(Hash)]] = null
         var bsetBases: Broadcast[Set[(Int)]] = null
 
-        val numTables = hasher.numTables
+        val lookupProvider = time("    Se hace broadcast de los datos") {
+            new BroadcastLookupProvider(data)
+        }
 
-        var currentData = data.flatMap { case (id, point) => (0 until numTables).map(tableIndex => (tableIndex, id, point)) }
+        var currentIndices = data.map { case (id, point) => id }
         var currentRadius = radius
         var iteration = 0
 
-        //val statistics = collection.mutable.Map[Int, Int]();
+        // Condición para formar un bucket. Aquellos que no la cumplan van a la siguiente ronda.
+        var bucketCondition = (size: Int) => size >= min && size <= max
 
-        var end = false;
-        while (!end) {
+        while (currentIndices.take(1).length != 0) {
             println(s"  R$iteration: $currentRadius")
+            println(s"  puntos restantess> ${currentIndices.count()}")
 
             // Estadísticas locales
             val statistics = collection.mutable.Map[Int, Int]();
 
-            // Condición para formar un bucket. Aquellos que no la cumplan van a la siguiente ronda.
-            val bucketCondition = (size: Int) => size >= min && size <= max
+            val currentData = currentIndices.flatMap(id => bhasher.value.hash(lookupProvider.lookup(id), currentRadius).map(hash => (hash, id)))
 
-            val setToFilter = time("    Se calculan los hash") {
-                filterHashes(currentData,
-                    radius,
-                    bhasher,
-                    bucketCondition)
+            if (time("    Se comprueba si todos son BASE") {
+                Utils.forAll(currentData) { case (hash, _) => Utils.isBaseHashPoint(hash) }
+            }) {
+                println("    Todos son BASE");
+
+                // En la siguiente iteración TODOS forman buckets
+                bucketCondition = _ => true
             }
 
-            //if (bsetToFilter != null) bsetToFilter.destroy()
-            bsetToFilter = sc.broadcast(setToFilter)
+            val hashWithNumPoints = currentData
+                .aggregateByKey(0)(
+                    { case (numPoints, id) => numPoints + 1 },
+                    (numPoints1, numPoints2) => numPoints1 + numPoints2)
+                .filter { case (hash, numPoints) => bucketCondition(numPoints) }
 
             time("    Se actualizan las estadísticas") {
-                updateStatistics(currentData,
-                    currentRadius,
-                    bhasher,
-                    bsetToFilter,
-                    statistics)
-            }
-
-            val remaining = time("    getRemaining") {
-                getRemaining(currentData,
-                    currentRadius,
-                    bhasher,
-                    bsetToFilter)
-            }
-
-            val setBases = time("    findBases") {
-                findBases(remaining)
-            }
-
-            if (!setBases.isEmpty) {
-                //if (bsetBases != null) bsetBases.destroy()
-                bsetBases = sc.broadcast(setBases)
-
-                time("    Se actualizan las estadísticas para las bases") {
-                    updateStatisticsForBases(remaining.map { case ((numTable, hash), (id, point)) => (numTable, id, point) },
-                        radius,
-                        bhasher,
-                        bsetBases,
-                        statistics)
-                }
-
-                currentData = time("    Se eliminan las bases") {
-                    removeBases(remaining.map { case ((numTable, hash), (id, point)) => (numTable, id, point) }, bsetBases)
-                }
-            } else {
-                currentData = remaining.map { case ((numTable, hash), (id, point)) => (numTable, id, point) }
-            }
-
-            val empty = time("    Comprobando si no hay puntos") {
-                currentData.take(1).length == 0
-            }
-
-            if (empty) {
-                println("    Vacío!")
-
-                end = true
-            }
-            else {
-                currentRadius = currentRadius * radiusMultiplier
-                iteration = iteration + 1
-
-                //currentTable = hashOptions.newHashEvaluator()
+                hashWithNumPoints
+                    .collect()
+                    .foreach { case (hash, numPoints) => {
+                        Utils.addOrUpdate(statistics, numPoints, 1, (prev: Int) => prev + 1)
+                    }
+                    }
             }
 
             println("    Estadísticas: Número de puntos - Número de buckets");
             showStatistics(statistics)
+
+            val currentBuckets = time("    Se obtienen los buckets construidos") {
+                hashWithNumPoints
+                    .map { case (hash, numPoints) => hash }
+                    .collect()
+                    .toSet
+            }
+
+            val bcurrentBuckets = time("    Se hace broadcast de los buckets construidos") {
+                sc.broadcast(currentBuckets)
+            }
+
+            val remaining = currentData.filter { case (hash, id) => !bcurrentBuckets.value.contains(hash) }
+
+            val usedPoints = currentData.filter { case (hash, id) => bcurrentBuckets.value.contains(hash) }
+                .map { case (hash, id) => id }
+                .distinct()
+                .collect()
+                .toSet
+
+            val busedPoints = time("    Se hace broadcast de los puntos usados") {
+                sc.broadcast(usedPoints)
+            }
+            currentIndices = currentIndices.filter(id => !busedPoints.value.contains(id))
+
+            currentRadius = currentRadius * radiusMultiplier
+            iteration = iteration + 1
+
+            /*if (Utils.forAll(remaining) { case (hash, _) => Utils.isBaseHashPoint(hash) }) {
+                println("    Todos son BASE");
+
+                // En la siguiente iteración TODOS forman buckets
+                bucketCondition = _ => true
+            } else {
+                currentIndices = time("    Se obtienen los puntos restantes") {
+                    currentData.filter { case (hash, id) => !bcurrentBuckets.value.contains(hash) }
+                        .map { case (hash, id) => id }
+                        .distinct()
+                }
+
+                currentRadius = currentRadius * radiusMultiplier
+                iteration = iteration + 1
+            }*/
         }
 
         if (bsetToFilter != null) bsetToFilter.destroy()
