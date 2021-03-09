@@ -3,7 +3,7 @@ package org.example.construction
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.rdd.RDD
-import org.example.{BroadcastLookupProvider, HashOptions, LookupProvider, Utils}
+import org.example.{BroadcastLookupProvider, EnvelopeDouble, HashOptions, LookupProvider, Utils}
 import org.example.Utils.time
 import org.example.evaluators.{Hash, HashPoint, Hasher}
 
@@ -19,114 +19,130 @@ class KnnConstructionAlgorithm(val desiredSize: Int,
 
     override def build(data: RDD[(Long, Vector)]): Unit = {
 
+        // Contexto de Spark
+        val sc = data.sparkContext
+
         val dimension = data.first()._2.size;
 
         //val (hasher, hashOptions, radius) = time(s"desiredSize = $desiredSize tolerance = ($min, $max)") {
         //    Hasher.getHasherForDataset(data, dimension, desiredSize)
         //} // 2 min
         val radius = 0.1
-        val hasher = new HashOptions(dimension, 16, 14).newHasher()
+        val hashOptions = new HashOptions(dimension, 16, 14)
 
-        val sc = data.sparkContext
-        var bhasher = sc.broadcast(hasher)
-        var bsetToFilter: Broadcast[Set[(Hash)]] = null
-        var bsetBases: Broadcast[Set[(Int)]] = null
+        var currentHasher = hashOptions.newHasher()
+        var bcurrentHasher = sc.broadcast(currentHasher)
 
         val lookupProvider = time("    Se hace broadcast de los datos") {
             new BroadcastLookupProvider(data)
         }
 
-        var currentIndices = data.map { case (id, point) => id }
+        var currentIndices = data.map { case (id, _) => id }
         var currentRadius = radius
         var iteration = 0
+
+        // Resultado
+        var result: RDD[(Double, Hash, Long)] = sc.emptyRDD
 
         // Condición para formar un bucket. Aquellos que no la cumplan van a la siguiente ronda.
         var bucketCondition = (size: Int) => size >= min && size <= max
 
-        while (currentIndices.take(1).length != 0) {
-            println(s"  R$iteration: $currentRadius")
-            println(s"  puntos restantess> ${currentIndices.count()}")
+        while (iteration < 30 || !time("Se comprueba si está vacío") {
+            currentIndices.isEmpty()
+        }) {
+            time("Iteración") {
+                println(s"  R$iteration: $currentRadius")
+                println(s"  puntos restantes: ${currentIndices.count()}")
 
-            // Estadísticas locales
-            val statistics = collection.mutable.Map[Int, Int]();
+                // Se guarda currentRadius porque se modifica al final del while y produce si se utiliza dentro de
+                // operaciones en RDDs
+                val savedRadius = currentRadius
 
-            val currentData = currentIndices.flatMap(id => bhasher.value.hash(lookupProvider.lookup(id), currentRadius).map(hash => (hash, id)))
+                val bsavedHasher = bcurrentHasher
 
-            if (time("    Se comprueba si todos son BASE") {
-                Utils.forAll(currentData) { case (hash, _) => Utils.isBaseHashPoint(hash) }
-            }) {
-                println("    Todos son BASE");
+                val currentData = currentIndices
+                    .flatMap(id => bsavedHasher.value.hash(lookupProvider.lookup(id), savedRadius).map(hash => (hash, id)))
 
-                // En la siguiente iteración TODOS forman buckets
-                bucketCondition = _ => true
-            }
+                if (time("    Se comprueba si todos son BASE") {
+                    Utils.forAll(currentData) { case (hash, _) => Utils.isBaseHashPoint(hash) }
+                }) {
+                    println("    ===== Todos son BASE =====");
 
-            val hashWithNumPoints = currentData
-                .aggregateByKey(0)(
-                    { case (numPoints, id) => numPoints + 1 },
-                    (numPoints1, numPoints2) => numPoints1 + numPoints2)
-                .filter { case (hash, numPoints) => bucketCondition(numPoints) }
-
-            time("    Se actualizan las estadísticas") {
-                hashWithNumPoints
-                    .collect()
-                    .foreach { case (hash, numPoints) => {
-                        Utils.addOrUpdate(statistics, numPoints, 1, (prev: Int) => prev + 1)
-                    }
-                    }
-            }
-
-            println("    Estadísticas: Número de puntos - Número de buckets");
-            showStatistics(statistics)
-
-            val currentBuckets = time("    Se obtienen los buckets construidos") {
-                hashWithNumPoints
-                    .map { case (hash, numPoints) => hash }
-                    .collect()
-                    .toSet
-            }
-
-            val bcurrentBuckets = time("    Se hace broadcast de los buckets construidos") {
-                sc.broadcast(currentBuckets)
-            }
-
-            val remaining = currentData.filter { case (hash, id) => !bcurrentBuckets.value.contains(hash) }
-
-            val usedPoints = currentData.filter { case (hash, id) => bcurrentBuckets.value.contains(hash) }
-                .map { case (hash, id) => id }
-                .distinct()
-                .collect()
-                .toSet
-
-            val busedPoints = time("    Se hace broadcast de los puntos usados") {
-                sc.broadcast(usedPoints)
-            }
-            currentIndices = currentIndices.filter(id => !busedPoints.value.contains(id))
-
-            currentRadius = currentRadius * radiusMultiplier
-            iteration = iteration + 1
-
-            /*if (Utils.forAll(remaining) { case (hash, _) => Utils.isBaseHashPoint(hash) }) {
-                println("    Todos son BASE");
-
-                // En la siguiente iteración TODOS forman buckets
-                bucketCondition = _ => true
-            } else {
-                currentIndices = time("    Se obtienen los puntos restantes") {
-                    currentData.filter { case (hash, id) => !bcurrentBuckets.value.contains(hash) }
-                        .map { case (hash, id) => id }
-                        .distinct()
+                    // En la iteración actual TODOS forman buckets
+                    // --> bucketCondition = _ => true PARA PROBAR SE DESACTIVA
                 }
 
+                // Se calculan los buckets (hash) y el número de puntos en cada uno
+                val hashWithNumPoints = currentData
+                    .aggregateByKey(0)(
+                        { case (numPoints, _) => numPoints + 1 },
+                        (numPoints1, numPoints2) => numPoints1 + numPoints2)
+
+                println("    Estadísticas: Número de puntos - Número de buckets");
+                time("    Se actualizan las estadísticas") {
+                    hashWithNumPoints
+                        .filter { case (_, numPoints) => bucketCondition(numPoints) }
+                        .map { case (_, numPoints) => (numPoints, 1) }
+                        .reduceByKey((count1, count2) => count1 + count2)
+                        .sortByKey()
+                        .foreach { case (numPoints, count) => {
+                            println(s"      $numPoints - $count")
+                        }
+                        }
+                }
+
+                val dataForBuckets = currentData
+                    .subtractByKey(
+                        hashWithNumPoints.filter { case (_, numPoints) => !bucketCondition(numPoints) }
+                    ).cache()
+
+                // Se calculan el tamaño de los buckets
+                val zeroVal = EnvelopeDouble.EMPTY
+                val seqOp = (accumulator: EnvelopeDouble, id: Long) => accumulator.join(lookupProvider.lookup(id))
+                val combOp = (accumulator1: EnvelopeDouble, accumulator2: EnvelopeDouble) => accumulator1.join(accumulator2)
+
+                /*println("    Envelopes");
+                dataForBuckets
+                    .aggregateByKey(zeroVal)(seqOp, combOp)
+                    .map { case (hash, envelope) => (hash, envelope.sizes.max) } // Max of the sizes of the envelope
+                    .foreach { case (hash, max) => {
+                        println(s"    $hash - $max")
+                    }
+                    }*/
+
+                val maxEvelopes = dataForBuckets
+                    .aggregateByKey(zeroVal)(seqOp, combOp)
+                    .map { case (_, envelope) => envelope.sizes.max } // Max of the sizes of the envelope
+                    .cache()
+                if (!maxEvelopes.isEmpty()) {
+                    println(s"    Máximo tamaño de los envelopes=${maxEvelopes.max()}")
+                }
+
+                // Se actualiza el resultado
+                result = result.union(dataForBuckets.map { case (hash, id) => (savedRadius, hash, id) })
+
+                val usedIndices = dataForBuckets
+                    .map { case (_, id) => id }
+
+                currentIndices = currentIndices.subtract(usedIndices)
+
                 currentRadius = currentRadius * radiusMultiplier
+
+                currentHasher = hashOptions.newHasher()
+                if (bcurrentHasher != null) bcurrentHasher.destroy()
+                bcurrentHasher = sc.broadcast(currentHasher)
+
                 iteration = iteration + 1
-            }*/
+            }
         }
 
-        if (bsetToFilter != null) bsetToFilter.destroy()
-        if (bsetBases != null) bsetBases.destroy()
-        if (bhasher != null) bhasher.destroy()
+        println("Se finaliza!")
+
+        if (bcurrentHasher != null) bcurrentHasher.destroy()
     }
+
+    // ----------------------------------------------------------------------------------------------------
+    // A partir de aquí no se utilizan
 
     def showStatistics(statistics: mutable.Map[Int, Int]): Unit = {
         time {

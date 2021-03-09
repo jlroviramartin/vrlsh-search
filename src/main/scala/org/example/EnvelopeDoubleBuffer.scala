@@ -34,7 +34,7 @@ class EnvelopeDoubleBuffer(val min: Array[Double], val max: Array[Double]) exten
 
     def dimension: Int = min.length;
 
-    def add(point: Seq[Double]): Unit = {
+    def add(point: Seq[Double]): EnvelopeDoubleBuffer = {
         assert(dimension == point.length);
         indices.foreach(i => {
             if (min(i) > max(i)) { // Empty
@@ -49,9 +49,10 @@ class EnvelopeDoubleBuffer(val min: Array[Double], val max: Array[Double]) exten
                 }
             }
         });
+        this;
     }
 
-    def add(point: Vector): Unit = {
+    def add(point: Vector): EnvelopeDoubleBuffer = {
         assert(dimension == point.size);
         indices.foreach(i => {
             if (min(i) > max(i)) { // Empty
@@ -66,9 +67,10 @@ class EnvelopeDoubleBuffer(val min: Array[Double], val max: Array[Double]) exten
                 }
             }
         });
+        this;
     }
 
-    def add(envelope: EnvelopeDoubleBuffer): Unit = {
+    def add(envelope: EnvelopeDoubleBuffer): EnvelopeDoubleBuffer = {
         assert(dimension == envelope.dimension);
         indices.foreach(i => {
             if (min(i) > max(i)) { // Empty
@@ -83,6 +85,7 @@ class EnvelopeDoubleBuffer(val min: Array[Double], val max: Array[Double]) exten
                 }
             }
         });
+        this;
     }
 
     override def hashCode: Int = Arrays.hashCode(min) ^ Arrays.hashCode(max)

@@ -71,8 +71,6 @@ object Utils {
     }
 
     def time[R](text: String)(block: => R): R = {
-        print(s"${text}")
-
         val t0 = System.nanoTime()
         val result = block // call-by-name
         val t1 = System.nanoTime()
@@ -82,7 +80,7 @@ object Utils {
         val seconds = TimeUnit.NANOSECONDS.toSeconds(difference) - TimeUnit.HOURS.toSeconds(hours) - TimeUnit.MINUTES.toSeconds(minutes);
         val nanos = difference - TimeUnit.MINUTES.toSeconds(minutes) - TimeUnit.HOURS.toNanos(hours) - TimeUnit.MINUTES.toNanos(minutes) - TimeUnit.SECONDS.toNanos(seconds);
 
-        println(s" - Elapsed time: $hours:$minutes:$seconds,$nanos")
+        println(s"${text} - Elapsed time: $hours:$minutes:$seconds,$nanos")
         result
     }
 
