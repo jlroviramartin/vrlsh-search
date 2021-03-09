@@ -77,6 +77,7 @@ class KnnConstructionAlgorithm(val desiredSize: Int,
                     .aggregateByKey(0)(
                         { case (numPoints, _) => numPoints + 1 },
                         (numPoints1, numPoints2) => numPoints1 + numPoints2)
+                    .cache()
 
                 println("    Estadísticas: Número de puntos - Número de buckets");
                 time("    Se actualizan las estadísticas") {
