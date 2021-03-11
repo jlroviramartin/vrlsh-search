@@ -134,6 +134,21 @@ object Utils {
         }
     }
 
+    // https://adaickalavan.github.io/scala/merging-two-sorted-lists-in-scala/
+    def merge[T](i: List[T], j: List[T], compare: (T, T) => Int): List[T] = {
+        (i, j) match {
+            case (Nil, Nil) => Nil
+            case (x :: xs, Nil) => i
+            case (Nil, y :: ys) => j
+            case (x :: xs, y :: ys) => {
+                if (compare(x, y) <= 0)
+                    x :: merge(i.tail, j, compare)
+                else
+                    y :: merge(i, j.tail, compare)
+            }
+        }
+    }
+
     /*def intersect(trEnvelope: EnvelopeDoubleBuffer, resolution: Double) = {
         trEnvelope.indices.filter(i => {
             val min = trEnvelope.min(i);

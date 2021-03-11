@@ -1,11 +1,7 @@
 package org.example
 
-import org.apache.spark.ml.linalg.Vectors
-import org.example.buckets.Bucket
 import org.example.evaluators.HashPoint
 import org.scalatest.funsuite.AnyFunSuite
-
-import java.nio.file.{Files, Paths}
 
 class UtilsSuite extends AnyFunSuite {
 
@@ -22,7 +18,7 @@ class UtilsSuite extends AnyFunSuite {
     }
 
     test("Testing addOrUpdate") {
-        val statistics = collection.mutable.Map[Int, Int]();
+        val statistics = collection.mutable.Map[Int, Int]()
         Utils.addOrUpdate(statistics, 1, 1, (v: Int) => v + 1)
         Utils.addOrUpdate(statistics, 2, 2, (v: Int) => v + 2)
         Utils.addOrUpdate(statistics, 3, 3, (v: Int) => v + 3)

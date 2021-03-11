@@ -1,7 +1,5 @@
 package org.example
 
-import org.apache.spark.ml.linalg.Vectors
-import org.example.buckets.Bucket
 import org.example.evaluators.HashPoint
 import org.scalatest.funsuite.AnyFunSuite
 

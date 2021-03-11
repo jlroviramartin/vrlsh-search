@@ -2,10 +2,7 @@ package org.example
 
 import org.apache.spark.ml.linalg.Vectors
 import org.example.buckets.Bucket
-import org.example.evaluators.Hash
 import org.scalatest.funsuite.AnyFunSuite
-
-import java.nio.file.{Files, Paths}
 
 class BucketSuite extends AnyFunSuite {
 

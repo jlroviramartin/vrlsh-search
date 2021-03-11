@@ -13,7 +13,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.{SparkConf, SparkContext}
 import org.example.buckets.Bucket
-import org.example.construction.{KnnConstructionAlgorithm, KnnConstructionAlgorithm_v2}
+import org.example.construction.KnnConstructionAlgorithm
 import org.example.evaluators.{DefaultHasher, EuclideanHashEvaluator, Hash, HashEvaluator, Hasher, LineEvaluator, TransformHashEvaluator}
 
 import java.io.File
@@ -56,9 +56,9 @@ object SimpleApp {
         val data: RDD[(Long, Vector)] = if (true) {
             sc.textFile(fileToRead.toString)
                 .map(line => {
-                    val args = line.split(',');
-                    val id = args(0).toLong;
-                    val values = (1 until args.length).map(i => args(i).toDouble).toArray;
+                    val args = line.split(',')
+                    val id = args(0).toLong
+                    val values = (1 until args.length).map(i => args(i).toDouble).toArray
                     (id, Vectors.dense(values))
                 })
         } else {
@@ -69,16 +69,54 @@ object SimpleApp {
                 .map { case (id, labelPoint) => (id, Vectors.dense(labelPoint.features.toArray)) }
         }
 
-        val desiredSize = 100;
+        val desiredSize = 100
 
         // Se limpian los datos antiguos
-        val directory = new Directory(baseDirectory.resolve("sizes").toFile);
-        directory.deleteRecursively();
+        //val directory = new Directory(baseDirectory.resolve("sizes").toFile)
+        //directory.deleteRecursively()
 
-        time {
-            new KnnConstructionAlgorithm(desiredSize, baseDirectory.toString).build(data)
-            //new KnnConstructionAlgorithm_v2(desiredSize, baseDirectory.toString).build(data)
+        val envelope = data
+            .map { case (_, point) => point }
+            .aggregate(EnvelopeDouble.EMPTY)(
+                EnvelopeDouble.seqOp,
+                EnvelopeDouble.combOp)
+        println(s"Envelope: $envelope")
+        println(s"Min: ${envelope.sizes.min} Max: ${envelope.sizes.max}")
+
+        val sample = data.takeSample(withReplacement = false, 1)
+
+        val iquery = sample(0)._1
+        val query = sample(0)._2
+        val k = 10
+
+        val distance = new KnnEuclideanDistance
+
+        println("===== Fuerza 'bruta'  =====")
+
+        val result = data
+            .map {
+                case (id, point) => (distance.distance(query, point), id)
+            }
+            .aggregate(new KnnResult())(KnnResult.seqOp(k), KnnResult.combOp(k))
+            .sorted.toList
+
+        println(s"Query: $iquery")
+        println("Resultado:")
+        result.foreach { case (distance, id) => println(s"  $distance - $id") }
+
+        println(s"===== Se ejecuta el algoritmo =====")
+
+        val knnQuery = time {
+            // Se limpian los datos antiguos
+            val directory = new Directory(baseDirectory.toFile)
+            directory.deleteRecursively()
+
+            new KnnConstructionAlgorithm(desiredSize, baseDirectory.toString, distance).build(data)
         }
+
+        val result2 = knnQuery.query(query, k)
+        println("Resultado:")
+        result2.foreach { case (distance, id) => println(s"  $distance - $id") }
         spark.stop()
     }
 }

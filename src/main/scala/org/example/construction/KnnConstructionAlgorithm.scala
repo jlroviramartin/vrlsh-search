@@ -1,28 +1,32 @@
 package org.example.construction
 
-import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.rdd.RDD
-import org.example.{BroadcastLookupProvider, EnvelopeDouble, HashOptions, LookupProvider, Utils}
+import org.example.{BroadcastLookupProvider, DataStore, Distance, EnvelopeDouble, HashOptions, KnnDistance, KnnEuclideanSquareDistance, KnnResult, Utils}
 import org.example.Utils.time
-import org.example.evaluators.{Hash, HashPoint, Hasher}
+import org.example.evaluators.{DefaultHasher, Hash}
+import Utils._
+import org.apache.spark.SparkContext
 
-import scala.collection.{Iterable, mutable}
+import java.io.{Externalizable, ObjectInput, ObjectOutput}
+import java.nio.file.Paths
+import scala.collection.immutable.TreeMap
 
 class KnnConstructionAlgorithm(val desiredSize: Int,
-                               val baseDirectory: String)
+                               val baseDirectory: String,
+                               val distance: KnnDistance)
     extends KnnConstruction {
 
-    val min = desiredSize * Utils.MIN_TOLERANCE;
-    val max = desiredSize * Utils.MAX_TOLERANCE;
-    val radiusMultiplier = 1.4;
+    val min: Double = desiredSize * Utils.MIN_TOLERANCE
+    val max: Double = desiredSize * Utils.MAX_TOLERANCE
+    val radiusMultiplier: Double = 1.4
 
-    override def build(data: RDD[(Long, Vector)]): Unit = {
+    override def build(data: RDD[(Long, Vector)]): KnnQuery = {
 
         // Contexto de Spark
         val sc = data.sparkContext
 
-        val dimension = data.first()._2.size;
+        val dimension = data.first()._2.size
 
         //val (hasher, hashOptions, radius) = time(s"desiredSize = $desiredSize tolerance = ($min, $max)") {
         //    Hasher.getHasherForDataset(data, dimension, desiredSize)
@@ -43,11 +47,12 @@ class KnnConstructionAlgorithm(val desiredSize: Int,
 
         // Resultado
         var result: RDD[(Double, Hash, Long)] = sc.emptyRDD
+        val hasherMap = new KnnMetadata()
 
         // Condición para formar un bucket. Aquellos que no la cumplan van a la siguiente ronda.
         var bucketCondition = (size: Int) => size >= min && size <= max
 
-        while (iteration < 30 || !time("Se comprueba si está vacío") {
+        while (!time("Se comprueba si está vacío") {
             currentIndices.isEmpty()
         }) {
             time("Iteración") {
@@ -64,13 +69,21 @@ class KnnConstructionAlgorithm(val desiredSize: Int,
                     .flatMap(id => bsavedHasher.value.hash(lookupProvider.lookup(id), savedRadius).map(hash => (hash, id)))
 
                 if (time("    Se comprueba si todos son BASE") {
-                    Utils.forAll(currentData) { case (hash, _) => Utils.isBaseHashPoint(hash) }
+                    forAll(currentData) { case (hash, _) => isBaseHashPoint(hash) }
                 }) {
-                    println("    ===== Todos son BASE =====");
+                    println("    ===== Todos son BASE =====")
 
+                    ////////////////////////////////////////////////////////////////////////////////////////////////////
                     // En la iteración actual TODOS forman buckets
-                    // --> bucketCondition = _ => true PARA PROBAR SE DESACTIVA
+                    // -----> bucketCondition = _ => true
+                    ////////////////////////////////////////////////////////////////////////////////////////////////////
                 }
+
+                ////////////////////////////////////////////////////////////////////////////////////////////////////////
+                if (iteration > 80) {
+                    bucketCondition = _ => true
+                }
+                ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
                 // Se calculan los buckets (hash) y el número de puntos en cada uno
                 val hashWithNumPoints = currentData
@@ -79,58 +92,43 @@ class KnnConstructionAlgorithm(val desiredSize: Int,
                         (numPoints1, numPoints2) => numPoints1 + numPoints2)
                     .cache()
 
-                println("    Estadísticas: Número de puntos - Número de buckets");
-                time("    Se actualizan las estadísticas") {
-                    hashWithNumPoints
-                        .filter { case (_, numPoints) => bucketCondition(numPoints) }
-                        .map { case (_, numPoints) => (numPoints, 1) }
-                        .reduceByKey((count1, count2) => count1 + count2)
-                        .sortByKey()
-                        .foreach { case (numPoints, count) => {
-                            println(s"      $numPoints - $count")
-                        }
-                        }
-                }
+                // Se muestran estadísticas: cuantos buckets tienen un cierto número de puntos
+                println("    Estadísticas: Número de puntos - Número de buckets")
+                showStatistics(hashWithNumPoints, bucketCondition)
 
+                // Se calculan los datos que se van a usar para los buckets
                 val dataForBuckets = currentData
                     .subtractByKey(
                         hashWithNumPoints.filter { case (_, numPoints) => !bucketCondition(numPoints) }
                     ).cache()
 
-                // Se calculan el tamaño de los buckets
-                val zeroVal = EnvelopeDouble.EMPTY
-                val seqOp = (accumulator: EnvelopeDouble, id: Long) => accumulator.join(lookupProvider.lookup(id))
-                val combOp = (accumulator1: EnvelopeDouble, accumulator2: EnvelopeDouble) => accumulator1.join(accumulator2)
+                if (!dataForBuckets.isEmpty()) {
+                    // Se muestran los envelopes
+                    //println("    Envelopes");
+                    //showEnvelopes(dataForBuckets, lookupProvider)
 
-                /*println("    Envelopes");
-                dataForBuckets
-                    .aggregateByKey(zeroVal)(seqOp, combOp)
-                    .map { case (hash, envelope) => (hash, envelope.sizes.max) } // Max of the sizes of the envelope
-                    .foreach { case (hash, max) => {
-                        println(s"    $hash - $max")
-                    }
-                    }*/
+                    // Se calcula el tamaño máximo de los envelopes
+                    showMinMaxEnvelope(dataForBuckets, lookupProvider)
 
-                val maxEvelopes = dataForBuckets
-                    .aggregateByKey(zeroVal)(seqOp, combOp)
-                    .map { case (_, envelope) => envelope.sizes.max } // Max of the sizes of the envelope
-                    .cache()
-                if (!maxEvelopes.isEmpty()) {
-                    println(s"    Máximo tamaño de los envelopes=${maxEvelopes.max()}")
+                    // Se actualiza el resultado
+                    result = result.union(dataForBuckets.map { case (hash, id) => (savedRadius, hash, id) })
+                    hasherMap.put(savedRadius, bsavedHasher.value)
+
+                    // Se calculan los nuevos índices
+                    val usedIndices = dataForBuckets
+                        .map { case (_, id) => id }
+                    currentIndices = currentIndices.subtract(usedIndices)
                 }
 
-                // Se actualiza el resultado
-                result = result.union(dataForBuckets.map { case (hash, id) => (savedRadius, hash, id) })
-
-                val usedIndices = dataForBuckets
-                    .map { case (_, id) => id }
-
-                currentIndices = currentIndices.subtract(usedIndices)
-
+                // Se incrementa el radio
                 currentRadius = currentRadius * radiusMultiplier
 
+                // Se crea un nuevo hasher
+                println("    Se crea un nuevo hasher")
                 currentHasher = hashOptions.newHasher()
-                if (bcurrentHasher != null) bcurrentHasher.destroy()
+                if (bcurrentHasher != null) {
+                    bcurrentHasher.destroy()
+                }
                 bcurrentHasher = sc.broadcast(currentHasher)
 
                 iteration = iteration + 1
@@ -140,112 +138,113 @@ class KnnConstructionAlgorithm(val desiredSize: Int,
         println("Se finaliza!")
 
         if (bcurrentHasher != null) bcurrentHasher.destroy()
+
+        println(s"Se almacena el resultado: $baseDirectory")
+
+        val dataFile = Paths.get(baseDirectory, "data").toString
+        val modelFile = Paths.get(baseDirectory, "model").toString
+        data.saveAsObjectFile(dataFile)
+        result.saveAsObjectFile(modelFile)
+
+        new MyKnnQuery(baseDirectory, data, result, hasherMap, lookupProvider, distance)
     }
 
-    // ----------------------------------------------------------------------------------------------------
-    // A partir de aquí no se utilizan
-
-    def showStatistics(statistics: mutable.Map[Int, Int]): Unit = {
-        time {
-            statistics.toSeq.sortBy(_._1).foreach { case (numPoints, count) => println(s"      $numPoints - $count") }
+    private def showStatistics(hashWithNumPoints: RDD[(Hash, Int)], bucketCondition: Int => Boolean): Unit = {
+        time("    Se actualizan las estadísticas") {
+            hashWithNumPoints
+                .filter { case (_, numPoints) => bucketCondition(numPoints) }
+                .map { case (_, numPoints) => (numPoints, 1) }
+                .reduceByKey((count1, count2) => count1 + count2)
+                .sortByKey()
+                .foreach { case (numPoints, count) => println(s"      $numPoints - $count") }
         }
     }
 
-    def sizesByHash(hashedData: RDD[(Int, Long, Vector)],
-                    radius: Double,
-                    bhasher: Broadcast[Hasher]): RDD[(Hash, Int)] = {
-
-        hashedData.map { case (tableIndex, id, point) => (bhasher.value.hash(tableIndex, point, radius), (id, point)) }
-            .aggregateByKey(0)( // Se cuenta el número de puntos en cada bucket
-                { case (numPts, id) => numPts + 1 },
-                { case (numPts1, numPts2) => numPts1 + numPts2 })
-    }
-
-    def filterHashes(hashedData: RDD[(Int, Long, Vector)],
-                     radius: Double,
-                     bhasher: Broadcast[Hasher],
-                     sizeFilter: Int => Boolean): Set[Hash] = {
-
-        val set = sizesByHash(hashedData, radius, bhasher)
-            .filter { case (_, size) => sizeFilter(size) }
-            .map { case (hash, _) => hash }
-            .collect().toSet
-        set
-    }
-
-    def updateStatistics(hashedData: RDD[(Int, Long, Vector)],
-                         radius: Double,
-                         bhasher: Broadcast[Hasher],
-                         bsetToFilter: Broadcast[Set[Hash]],
-                         statistics: mutable.Map[Int, Int]): Unit = {
-
-        hashedData.map { case (tableIndex, id, point) => (bhasher.value.hash(tableIndex, point, radius), (id, point)) }
-            .filter { case (hash, (_, _)) => bsetToFilter.value.contains(hash) }
-            .aggregateByKey(0)(
-                { case (numPoints, (id, point)) => numPoints + 1 },
-                (numPoints1, numPoints2) => numPoints1 + numPoints2)
-            .collect()
-            .foreach { case (hash, numPoints) =>
-                Utils.addOrUpdate(statistics, numPoints, 1, (prev: Int) => prev + 1)
+    private def showEnvelopes(dataForBuckets: RDD[(Hash, Long)], lookupProvider: BroadcastLookupProvider): Unit = {
+        // Se calculan el tamaño de los buckets
+        dataForBuckets
+            .aggregateByKey(EnvelopeDouble.EMPTY)(
+                (envelope, id) => EnvelopeDouble.seqOp(envelope, lookupProvider.lookup(id)),
+                EnvelopeDouble.combOp)
+            .map { case (hash, envelope) => (hash, envelope.sizes.max) } // Max of the sizes of the envelope
+            .foreach { case (hash, value) => {
+                println(s"    $hash - $value")
+            }
             }
     }
 
-    def updateStatisticsWithoutFilter(hashedData: RDD[(Int, Long, Vector)],
-                                      radius: Double,
-                                      bhasher: Broadcast[Hasher],
-                                      statistics: mutable.Map[Int, Int]): Unit = {
+    private def showMinMaxEnvelope(dataForBuckets: RDD[(Hash, Long)], lookupProvider: BroadcastLookupProvider): Unit = {
+        // Se calculan el tamaño de los buckets
+        val maxEnvelopes = dataForBuckets
+            .aggregateByKey(EnvelopeDouble.EMPTY)(
+                (envelope, id) => EnvelopeDouble.seqOp(envelope, lookupProvider.lookup(id)),
+                EnvelopeDouble.combOp)
+            .map { case (_, envelope) => (envelope.sizes.min, envelope.sizes.max) } // (min, max) of the sizes of the envelope
+            .cache()
 
-        hashedData.map { case (tableIndex, id, point) => (bhasher.value.hash(tableIndex, point, radius), (id, point)) }
-            .aggregateByKey(0)(
-                { case (numPoints, (id, point)) => numPoints + 1 },
-                (numPoints1, numPoints2) => numPoints1 + numPoints2)
-            .collect()
-            .foreach { case (hash, numPoints) =>
-                Utils.addOrUpdate(statistics, numPoints, 1, (prev: Int) => prev + 1)
+        if (!maxEnvelopes.isEmpty()) {
+            val min = maxEnvelopes.map(_._1).min()
+            val max = maxEnvelopes.map(_._2).max()
+            println(s"    Envelopes Min: $min Max: $max")
+        }
+    }
+}
+
+class MyKnnQuery(val baseDirectory: String,
+                 val data: RDD[(Long, Vector)],
+                 val result: RDD[(Double, Hash, Long)],
+                 val hasherMap: KnnMetadata,
+                 val lookupProvider: BroadcastLookupProvider,
+                 val distance: KnnDistance)
+    extends KnnQuery with Serializable {
+
+    def query(point: Vector, k: Int): List[(Double, Long)] = {
+        val queries = hasherMap.radius
+            .map(radius => (radius, hasherMap.getHasher(radius)))
+            .flatMap {
+                case (radius, Some(hasher)) => hasher.hash(point, radius).map(hash => (radius, hash))
             }
-    }
-
-    def updateStatisticsForBases(hashedData: RDD[(Int, Long, Vector)],
-                                 radius: Double,
-                                 bhasher: Broadcast[Hasher],
-                                 bsetBases: Broadcast[Set[Int]],
-                                 statistics: mutable.Map[Int, Int]): Unit = {
-
-        hashedData.map { case (tableIndex, id, point) => (bhasher.value.hash(tableIndex, point, radius), (id, point)) }
-            .filter { case (hash, (_, _)) => bsetBases.value.contains(HashPoint.getIndex(hash)) }
-            .aggregateByKey(0)(
-                { case (numPoints, (id, point)) => numPoints + 1 },
-                (numPoints1, numPoints2) => numPoints1 + numPoints2)
-            .collect()
-            .foreach { case (hash, numPoints) =>
-                Utils.addOrUpdate(statistics, numPoints, 1, (prev: Int) => prev + 1)
-            }
-    }
-
-    def removeBases(data: RDD[(Int, Long, Vector)],
-                    bsetBases: Broadcast[Set[Int]]): RDD[(Int, Long, Vector)] = {
-
-        data.filter { case (numTable, id, point) => !bsetBases.value.contains(numTable) }
-    }
-
-    def getRemaining(hashedData: RDD[(Int, Long, Vector)],
-                     radius: Double,
-                     bhasher: Broadcast[Hasher],
-                     bsetToFilter: Broadcast[Set[Hash]]): RDD[((Int, Hash), (Long, Vector))] = {
-
-        hashedData.map { case (tableIndex, id, point) => ((tableIndex, bhasher.value.hash(tableIndex, point, radius)), (id, point)) }
-            .filter { case ((tableIndex, hash), (id, point)) => !bsetToFilter.value.contains(hash) }
-    }
-
-    def findBases(data: RDD[((Int, Hash), (Long, Vector))]): Set[Int] = {
-        data.map { case ((numTable, hash), (id, point)) => (numTable, hash) }
-            .aggregateByKey(true)( // Se comprueba si todos son base
-                { case (isBase, hash) => isBase && Utils.isBaseHashPoint(hash) },
-                { case (isBase1, isBase2) => isBase1 && isBase2 })
-            .filter { case (numTable, isBase) => isBase }
-            .map { case (numTable, isBase) => numTable }
-            .distinct()
-            .collect()
             .toSet
+
+        val sc = result.sparkContext
+        val bqueries = sc.broadcast(queries)
+        val bpoint = sc.broadcast(point)
+
+        result
+            .filter {
+                case (radius, hash, _) => bqueries.value.contains((radius, hash))
+            }
+            .map {
+                case (_, _, id) => (distance.distance(bpoint.value, lookupProvider.lookup(id)), id)
+            }
+            .aggregate(new KnnResult())(KnnResult.seqOp(k), KnnResult.combOp(k))
+            .sorted.toList
+    }
+
+    def getSerializable(): KnnQuerySerializable = {
+        new MyKnnQuerySerializator(this)
+    }
+
+}
+
+class MyKnnQuerySerializator(var baseDirectory: String,
+                             var hasherMap: KnnMetadata,
+                             var distance: KnnDistance)
+    extends KnnQuerySerializable {
+
+    def this(query: MyKnnQuery) = {
+        this(query.baseDirectory, query.hasherMap, query.distance)
+    }
+
+    def get(sc: SparkContext): MyKnnQuery = {
+        val dataFile = Paths.get(baseDirectory, "data").toString
+        val modelFile = Paths.get(baseDirectory, "model").toString
+
+        val data = sc.objectFile[(Long, Vector)](dataFile)
+        val result = sc.objectFile[(Double, Hash, Long)](modelFile)
+
+        val lookupProvider = new BroadcastLookupProvider(data)
+
+        new MyKnnQuery(baseDirectory, data, result, hasherMap, lookupProvider, distance)
     }
 }

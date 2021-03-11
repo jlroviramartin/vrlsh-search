@@ -78,4 +78,8 @@ class EnvelopeDouble(
 
 object EnvelopeDouble {
     val EMPTY = new EnvelopeDouble(0)
+
+    def seqOp(accumulator: EnvelopeDouble, point: Vector): EnvelopeDouble = accumulator.join(point)
+
+    def combOp(accumulator1: EnvelopeDouble, accumulator2: EnvelopeDouble): EnvelopeDouble = accumulator1.join(accumulator2)
 }

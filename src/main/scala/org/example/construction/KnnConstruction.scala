@@ -11,5 +11,5 @@ import java.nio.file.Path
 import scala.collection.{Iterable, mutable}
 
 trait KnnConstruction extends Serializable {
-    def build(data: RDD[(Long, Vector)])
+    def build(data: RDD[(Long, Vector)]): KnnQuery
 }

@@ -17,7 +17,7 @@ object Distance {
      * @return Squared distance.
      */
     def squareDistance(point1: Seq[Double], point2: Seq[Double]): Double = {
-        (point1 zip point2).map { case (a, b) => square(b - a) }.sum;
+        (point1 zip point2).map { case (a, b) => square(b - a) }.sum
     }
 
     /**
@@ -28,7 +28,7 @@ object Distance {
      * @return Distance.
      */
     def distance(point1: Seq[Double], point2: Seq[Double]): Double = {
-        Math.sqrt(squareDistance(point1, point2));
+        Math.sqrt(squareDistance(point1, point2))
     }
 
     /**
@@ -50,7 +50,7 @@ object Distance {
      * @return Distance.
      */
     def distance(point1: Vector, point2: Vector): Double = {
-        Math.sqrt(squareDistance(point1, point2));
+        Math.sqrt(squareDistance(point1, point2))
     }
 
     /**
@@ -64,12 +64,12 @@ object Distance {
         (point zip (envelope.minimum zip envelope.maximum))
             .map { case (a, (min, max)) =>
                 if (a < min)
-                    square(min - a); // Lesser than min
+                    square(min - a) // Lesser than min
                 else if (a > max)
-                    square(a - max); // Greater than max
+                    square(a - max) // Greater than max
                 else
                     0.0 // Between min and max: inside
-            }.sum;
+            }.sum
     }
 
     /**
@@ -80,7 +80,7 @@ object Distance {
      * @return Distance.
      */
     def distance(point: Seq[Double], envelope: EnvelopeDoubleBuffer): Double = {
-        Math.sqrt(squareDistance(point, envelope));
+        Math.sqrt(squareDistance(point, envelope))
     }
 
     /**
@@ -93,16 +93,16 @@ object Distance {
     def squareDistance(point: Vector, envelope: EnvelopeDoubleBuffer): Double = {
         envelope.indices
             .map(i => {
-                val a = point(i);
-                val min = envelope.minimum(i);
-                val max = envelope.maximum(i);
+                val a = point(i)
+                val min = envelope.minimum(i)
+                val max = envelope.maximum(i)
                 if (a < min)
-                    square(min - a); // Lesser than min
+                    square(min - a) // Lesser than min
                 else if (a > max)
-                    square(a - max); // Greater than max
+                    square(a - max) // Greater than max
                 else
                     0.0 // Between min and max: inside
-            }).sum;
+            }).sum
     }
 
     /**
@@ -113,6 +113,21 @@ object Distance {
      * @return Distance.
      */
     def distance(point: Vector, envelope: EnvelopeDoubleBuffer): Double = {
-        Math.sqrt(squareDistance(point, envelope));
+        Math.sqrt(squareDistance(point, envelope))
     }
+}
+
+trait KnnDistance extends Serializable {
+
+    def distance(point1: Vector, point2: Vector): Double
+}
+
+class KnnEuclideanSquareDistance extends KnnDistance {
+
+    override def distance(point1: Vector, point2: Vector): Double = Distance.squareDistance(point1, point2)
+}
+
+class KnnEuclideanDistance extends KnnDistance {
+
+    override def distance(point1: Vector, point2: Vector): Double = Distance.distance(point1, point2)
 }
