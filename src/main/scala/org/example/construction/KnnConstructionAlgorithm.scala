@@ -28,11 +28,13 @@ class KnnConstructionAlgorithm(val desiredSize: Int,
 
         val dimension = data.first()._2.size
 
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         //val (hasher, hashOptions, radius) = time(s"desiredSize = $desiredSize tolerance = ($min, $max)") {
         //    Hasher.getHasherForDataset(data, dimension, desiredSize)
         //} // 2 min
         val radius = 0.1
         val hashOptions = new HashOptions(dimension, 16, 14)
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
         var currentHasher = hashOptions.newHasher()
         var bcurrentHasher = sc.broadcast(currentHasher)
@@ -167,10 +169,7 @@ class KnnConstructionAlgorithm(val desiredSize: Int,
                 (envelope, id) => EnvelopeDouble.seqOp(envelope, lookupProvider.lookup(id)),
                 EnvelopeDouble.combOp)
             .map { case (hash, envelope) => (hash, envelope.sizes.max) } // Max of the sizes of the envelope
-            .foreach { case (hash, value) => {
-                println(s"    $hash - $value")
-            }
-            }
+            .foreach { case (hash, value) => println(s"    $hash - $value") }
     }
 
     private def showMinMaxEnvelope(dataForBuckets: RDD[(Hash, Long)], lookupProvider: BroadcastLookupProvider): Unit = {
@@ -211,20 +210,13 @@ class MyKnnQuery(val baseDirectory: String,
         val bpoint = sc.broadcast(point)
 
         result
-            .filter {
-                case (radius, hash, _) => bqueries.value.contains((radius, hash))
-            }
-            .map {
-                case (_, _, id) => (distance.distance(bpoint.value, lookupProvider.lookup(id)), id)
-            }
+            .filter { case (radius, hash, _) => bqueries.value.contains((radius, hash)) }
+            .map { case (_, _, id) => (distance.distance(bpoint.value, lookupProvider.lookup(id)), id) }
             .aggregate(new KnnResult())(KnnResult.seqOp(k), KnnResult.combOp(k))
             .sorted.toList
     }
 
-    def getSerializable(): KnnQuerySerializable = {
-        new MyKnnQuerySerializator(this)
-    }
-
+    def getSerializable(): KnnQuerySerializable = new MyKnnQuerySerializator(this)
 }
 
 class MyKnnQuerySerializator(var baseDirectory: String,
@@ -232,9 +224,7 @@ class MyKnnQuerySerializator(var baseDirectory: String,
                              var distance: KnnDistance)
     extends KnnQuerySerializable {
 
-    def this(query: MyKnnQuery) = {
-        this(query.baseDirectory, query.hasherMap, query.distance)
-    }
+    def this(query: MyKnnQuery) = this(query.baseDirectory, query.hasherMap, query.distance)
 
     def get(sc: SparkContext): MyKnnQuery = {
         val dataFile = Paths.get(baseDirectory, "data").toString
