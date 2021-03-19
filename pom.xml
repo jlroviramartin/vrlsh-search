@@ -55,6 +55,11 @@
             <artifactId>kryo</artifactId>
             <version>5.0.3</version>
         </dependency>
+        <dependency>
+            <groupId>com.twitter</groupId>
+            <artifactId>chill_${scala.compat.version}</artifactId>
+            <version>0.9.5</version>
+        </dependency>
 
         <!-- https://index.scala-lang.org/altoo-ag/akka-kryo-serialization/akka-kryo-serialization/2.1.0?target=_2.13 -->
         <!-- <dependency>

@@ -7,6 +7,7 @@ import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector}
 
 import scala.Array.ofDim
 
+@SerialVersionUID(8059801217099121303l)
 class DefaultHasher(val evaluators: Array[HashEvaluator])
     extends Hasher {
 
@@ -55,16 +56,21 @@ class DefaultHasher(val evaluators: Array[HashEvaluator])
     }
 }
 
+@SerialVersionUID(-8802708557026697600l)
 class EuclideanHasher(val table: Array[Array[Array[Double]]],
+                      val r: Double,
                       val b: Array[Array[Double]],
                       val numTables: Int,
                       val keyLength: Int,
                       val dimension: Int)
     extends Hasher {
 
+    def this() = this(null, 0, null, 0, 0, 0)
+
     def this(options: HashOptions) = {
-        this(ofDim[Double](options.numTables, options.keyLength, options.dim),
-            ofDim[Double](options.numTables, options.keyLength),
+        this(table = ofDim[Double](options.numTables, options.keyLength, options.dim),
+            r = options.random.nextGaussian,
+            b = ofDim[Double](options.numTables, options.keyLength),
             options.numTables, options.keyLength, options.dim);
 
         for (i <- 0 until numTables)
@@ -76,9 +82,7 @@ class EuclideanHasher(val table: Array[Array[Array[Double]]],
     }
 
     override def hash(point: Vector, radius: Double): Seq[Hash] = {
-        (0 until numTables).map(index => {
-            hash(index, point, radius)
-        })
+        (0 until numTables).map(index => hash(index, point, radius))
     }
 
     override def hash(tableIndex: Int, point: Vector, radius: Double): Hash = {
@@ -88,14 +92,14 @@ class EuclideanHasher(val table: Array[Array[Array[Double]]],
             point match {
                 case dense: DenseVector => {
                     for (k <- 0 until dimension)
-                        dotProd += dense(k) * table(tableIndex)(j)(k)
+                        dotProd += (dense(k) + r * radius) * table(tableIndex)(j)(k)
                 }
                 case sparse: SparseVector => { //SparseVector
                     val indices = sparse.indices
                     val values = sparse.values
 
                     for (k <- 0 until indices.length) {
-                        dotProd += values(k) * table(tableIndex)(j)(indices(k))
+                        dotProd += (values(k) + r * radius) * table(tableIndex)(j)(indices(k))
                     }
                 }
             }

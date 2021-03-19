@@ -5,12 +5,19 @@ import scala.collection.immutable.TreeMap
 class KnnResult(val sorted: TreeMap[Double, Long]) extends Serializable {
 
     def this() = this(TreeMap())
+
+    def size: Int = sorted.size
 }
 
 object KnnResult {
 
     def seqOp(k: Int)(accumulator: KnnResult, data: (Double, Long)): KnnResult = {
         val sorted = accumulator.sorted + data
+        new KnnResult(sorted.take(k))
+    }
+
+    def seqOp2(k: Int)(accumulator: KnnResult, data: List[(Double, Long)]): KnnResult = {
+        val sorted = accumulator.sorted ++ data
         new KnnResult(sorted.take(k))
     }
 

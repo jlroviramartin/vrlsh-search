@@ -2,8 +2,8 @@ package org.example
 
 import com.esotericsoftware.kryo.{Kryo, Serializer}
 import com.esotericsoftware.kryo.io.{Input, Output}
-import com.esotericsoftware.kryo.serializers.{MapSerializer, CollectionSerializer}
-import com.twitter.chill.{KryoInstantiator, WrappedArraySerializer, Tuple2Serializer}
+import com.esotericsoftware.kryo.serializers.{CollectionSerializer, MapSerializer}
+import com.twitter.chill.{KryoInstantiator, ScalaKryoInstantiator, Tuple2Serializer, WrappedArraySerializer}
 import com.twitter.chill.config.{ConfiguredInstantiator, JavaMapConfig}
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 
@@ -14,26 +14,31 @@ import scala.collection.mutable
 
 object DataStore {
     val kryo = {
-        val kryo: Kryo = new Kryo()
+        val instantiator = new ScalaKryoInstantiator()
+        instantiator.setRegistrationRequired(true)
+        val kryo: Kryo = instantiator.newKryo
+
+        //val kryo: Kryo = new Kryo()
 
         kryo.register(classOf[mutable.WrappedArray.ofRef[Any]], new WrappedArraySerializer[Any])
         //kryo.register(classOf[immutable.Vector[Any]], new CollectionSerializer)
         kryo.register(classOf[(Any, Any)], new Tuple2Serializer)
         kryo.register(classOf[Vector], VectorSerializer)
+        //kryo.register(classOf[Map[_, _]], new MapSerializer)
         kryo
     }
 
     def kstore[T](fileName: String, toStore: T): Unit = {
         val output = new Output(new FileOutputStream(fileName))
-        kryo.writeObject(output, toStore)
+        kryo.writeClassAndObject(output, toStore)
         output.close
     }
 
     def kload[T](fileName: String, ttype: Class[T]): T = {
         val input = new Input(new FileInputStream(fileName))
-        val result = kryo.readObject(input, ttype)
+        val result = kryo.readClassAndObject(input)
         input.close
-        result
+        result.asInstanceOf[T]
     }
 
     def kstore[T](fileName: Path, toStore: T): Unit = kstore[T](fileName.toString, toStore)
