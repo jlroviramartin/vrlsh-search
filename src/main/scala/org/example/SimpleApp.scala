@@ -71,10 +71,6 @@ object SimpleApp {
 
         val desiredSize = 100
 
-        // Se limpian los datos antiguos
-        //val directory = new Directory(baseDirectory.resolve("sizes").toFile)
-        //directory.deleteRecursively()
-
         val envelope = data
             .map { case (_, point) => point }
             .aggregate(EnvelopeDouble.EMPTY)(
@@ -106,7 +102,6 @@ object SimpleApp {
             knnQuery
         }
 
-
         val k = 10
 
         val sample = data.takeSample(withReplacement = false, 1)
@@ -114,32 +109,9 @@ object SimpleApp {
 
         check(data, knnQuery, query, k)
 
-        /*val distance = new KnnEuclideanDistance
-
-        println("===== Fuerza 'bruta'  =====")
-
-        val result = data
-            .map { case (id, point) => (distance.distance(query, point), id) }
-            .aggregate(new KnnResult())(KnnResult.seqOp(kFuerzaBruta), KnnResult.combOp(kFuerzaBruta))
-            .sorted.toList
-
-        println(s"Query: $iquery")
-        println("Resultado:")
-        result.foreach { case (distance, id) => println(s"  $distance - $id") }
-
-        println(s"===== Se ejecuta el algoritmo =====")
-
-        val knnQuery = time {
-            // Se limpian los datos antiguos
-            val directory = new Directory(baseDirectory.toFile)
-            directory.deleteRecursively()
-
-            new KnnConstructionAlgorithm(desiredSize, baseDirectory.toString, distance).build(data)
-        }
-
-        val result2 = knnQuery.query(query, k)
-        println("Resultado:")
-        result2.foreach { case (distance, id) => println(s"  $distance - $id") }*/
+        (0 until 10).foreach(i => {
+            check(data, knnQuery, random(envelope), k)
+        })
 
         spark.stop()
     }
@@ -153,28 +125,37 @@ object SimpleApp {
     def check(data: RDD[(Long, Vector)], knnQuery: KnnQuery, query: Vector, k: Int): Unit = {
         println(s"Query: $query")
 
-        println("===== Algorithm  =====")
+        val sc = data.sparkContext
 
         val result = knnQuery.query(query, k)
 
-        println("===== Fuerza 'bruta'  =====")
-        val kFuerzaBruta = 1000
+        val realMap = time("1 - ") {
+            val set = sc.broadcast(result.map { case (_, id) => id }.toSet)
 
-        val distance = new KnnEuclideanDistance
+            val distance = new KnnEuclideanDistance
+            data
+                .map { case (id, point) => (distance.distance(query, point), id) }
+                .sortByKey()
+                .zipWithIndex
+                .filter { case ((_, id), _) => set.value.contains(id) }
+                .take(k)
+                .map { case ((d, id), index) => (id, (index, d)) }
+                .toMap
+        }
 
-        val realMap = data
-            .map { case (id, point) => (distance.distance(query, point), id) }
-            .aggregate(new KnnResult())(KnnResult.seqOp(kFuerzaBruta), KnnResult.combOp(kFuerzaBruta))
-            .sorted
-            .zipWithIndex
-            .map { case ((d, id), index) => (id, (index, d)) }
-            .toMap
-
-        //realMap
-        //    .foreach { case (id, (index, d)) => println(s"  $d - $id - $index") }
+        /*val kFuerzaBruta = 100000
+        val realMap2 = time("2 = ") {
+            data
+                .map { case (id, point) => (distance.distance(query, point), id) }
+                .aggregate(new KnnResult())(KnnResult.seqOp(kFuerzaBruta), KnnResult.combOp(kFuerzaBruta))
+                .sorted
+                .zipWithIndex
+                .map { case ((d, id), index) => (id, (index, d)) }
+                .toMap
+        }*/
 
         result
-            .map { case (d, id) => (id, d, realMap(id)._1) }
+            .map { case (d, id) => (id, d, if (realMap.contains(id)) realMap(id)._1 else -1) }
             .foreach { case (id, d, index) => println(s"  $d - $id - $index") }
     }
 }
