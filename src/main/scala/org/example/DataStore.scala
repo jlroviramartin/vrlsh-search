@@ -65,8 +65,10 @@ object DataStore {
 
 object VectorSerializer extends Serializer[Vector] {
     override def write(kryo: Kryo, output: Output, t: Vector): Unit = {
-        output.writeInt(t.toArray.size)
-        output.writeDoubles(t.toArray)
+        val size = t.toArray.size
+        val array = t.toArray
+        output.writeInt(size)
+        output.writeDoubles(array)
     }
 
     override def read(kryo: Kryo, input: Input, aClass: Class[Vector]): Vector = {

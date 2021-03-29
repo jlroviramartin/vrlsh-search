@@ -1,17 +1,21 @@
 package org.example
 
-import org.apache.hadoop.yarn.util.RackResolver
-
 import java.util.concurrent.TimeUnit
 import scala.util.control.NonFatal
+import scala.util.Random
+
+import org.apache.hadoop.yarn.util.RackResolver
 import org.apache.log4j.{Level, Logger}
 import org.apache.spark.rdd.RDD
+
 import org.example.evaluators.Hash
 import org.example.evaluators.HashPoint
 
 object Utils {
     val MIN_TOLERANCE = 0.5 // 0.4
     val MAX_TOLERANCE = 1.5 // 1.1
+
+    val RANDOM = new Random(0)
 
     def log(a: Double, base: Double): Double = Math.log(a) / Math.log(base);
 

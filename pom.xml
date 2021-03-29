@@ -59,6 +59,12 @@
             <groupId>com.twitter</groupId>
             <artifactId>chill_${scala.compat.version}</artifactId>
             <version>0.9.5</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.esotericsoftware</groupId>
+                    <artifactId>kryo-shaded</artifactId> <!-- 4.0.2 !!! -->
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <!-- https://index.scala-lang.org/altoo-ag/akka-kryo-serialization/akka-kryo-serialization/2.1.0?target=_2.13 -->

@@ -1,10 +1,10 @@
 package org.example
 
-import scala.collection.immutable.TreeMap
+import scala.collection.immutable.{Iterable, TreeMap, TreeSet}
 
-class KnnResult(val sorted: TreeMap[Double, Long]) extends Serializable {
+class KnnResult(val sorted: TreeSet[(Double, Long)]) extends Serializable {
 
-    def this() = this(TreeMap())
+    def this() = this(TreeSet())
 
     def size: Int = sorted.size
 }
@@ -16,7 +16,7 @@ object KnnResult {
         new KnnResult(sorted.take(k))
     }
 
-    def seqOp2(k: Int)(accumulator: KnnResult, data: List[(Double, Long)]): KnnResult = {
+    def seqOpOfList(k: Int)(accumulator: KnnResult, data: List[(Double, Long)]): KnnResult = {
         val sorted = accumulator.sorted ++ data
         new KnnResult(sorted.take(k))
     }

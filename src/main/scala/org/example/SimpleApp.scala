@@ -1,25 +1,12 @@
 package org.example
 
-import Utils._
-
-import collection._
-import org.apache.spark.sql.{Dataset, SparkSession}
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.linalg.Vectors
-import org.apache.spark.ml.linalg.Vectors._
-import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
-import org.apache.spark.serializer.KryoSerializer
-import org.apache.spark.{SparkConf, SparkContext}
-import org.example.buckets.Bucket
-import org.example.construction.{KnnConstructionAlgorithm, KnnMetadata, KnnQuery, KnnQuerySerializable, MyKnnQuery, MyKnnQuerySerializator}
-import org.example.evaluators.{DefaultHasher, EuclideanHashEvaluator, EuclideanHasher, Hash, HashEvaluator, Hasher, LineEvaluator, TransformHashEvaluator}
 
-import java.io.File
-import java.nio.file.{Files, Path, Paths}
-import scala.reflect.io.Directory
-import scala.util.Random;
+import java.nio.file.{Files, Paths}
 
 // How to turn off INFO logging in Spark? https://stackoverflow.com/a/26123496
 object SimpleApp {
@@ -53,6 +40,20 @@ object SimpleApp {
             .getOrCreate()
         val sc = spark.sparkContext
 
+
+        /*
+        val result = sc
+            .textFile(Paths.get("C:", "Users", "joseluis", "OneDrive", "TFM", "dataset", "shape_NonIndexed.csv").toString)
+            .randomSplit(Array(0.9, 0.1), seed = 12345)
+        result(0)
+            .repartition(1)
+            .saveAsTextFile(Paths.get("C:", "Users", "joseluis", "OneDrive", "TFM", "dataset", "shape_NonIndexed.csv_p9.csv").toString)
+        result(1)
+            .repartition(1)
+            .saveAsTextFile(Paths.get("C:", "Users", "joseluis", "OneDrive", "TFM", "dataset", "shape_NonIndexed.csv_p1.csv").toString)
+        */
+
+
         val data: RDD[(Long, Vector)] = if (true) {
             sc.textFile(fileToRead.toString)
                 .map(line => {
@@ -69,93 +70,17 @@ object SimpleApp {
                 .map { case (id, labelPoint) => (id, Vectors.dense(labelPoint.features.toArray)) }
         }
 
-        val desiredSize = 100
-
+        // Se calcula el recubrimiento
         val envelope = data
             .map { case (_, point) => point }
             .aggregate(EnvelopeDouble.EMPTY)(
                 EnvelopeDouble.seqOp,
                 EnvelopeDouble.combOp)
-        println(s"Envelope: $envelope")
-        println(s"Min: ${envelope.sizes.min} Max: ${envelope.sizes.max}")
 
-        // Build
-        val knnQuery: KnnQuery = if (false) {
-            val distance = new KnnEuclideanDistance
-            val knnQuery = time {
-                // Se limpian los datos antiguos
-                val directory = new Directory(baseDirectory.toFile)
-                directory.deleteRecursively()
+        val desiredSize = 100
 
-                new KnnConstructionAlgorithm(desiredSize, baseDirectory.toString, distance).build(data)
-            }
-
-            DataStore.kstore(
-                baseDirectory.resolve("KnnQuery.dat"),
-                knnQuery.getSerializable())
-
-            knnQuery
-        } else {
-            val knnQuery = DataStore.kload(
-                baseDirectory.resolve("KnnQuery.dat"),
-                classOf[MyKnnQuerySerializator]).get(sc)
-            knnQuery
-        }
-
-        val k = 10
-
-        val sample = data.takeSample(withReplacement = false, 1)
-        val query = sample(0)._2
-
-        check(data, knnQuery, query, k)
-
-        (0 until 10).foreach(i => {
-            check(data, knnQuery, random(envelope), k)
-        })
-
+        KnnTest.testSet1(envelope, data.cache(), baseDirectory, desiredSize)
+        //KnnTest.testSet2(data, baseDirectory, desiredSize, 10, 10)
         spark.stop()
-    }
-
-    val random = new Random(0)
-
-    def random(envelope: EnvelopeDouble): Vector = {
-        Vectors.dense(envelope.min.zip(envelope.max).map { case (min, max) => min + random.nextDouble() * (max - min) })
-    }
-
-    def check(data: RDD[(Long, Vector)], knnQuery: KnnQuery, query: Vector, k: Int): Unit = {
-        println(s"Query: $query")
-
-        val sc = data.sparkContext
-
-        val result = knnQuery.query(query, k)
-
-        val realMap = time("1 - ") {
-            val set = sc.broadcast(result.map { case (_, id) => id }.toSet)
-
-            val distance = new KnnEuclideanDistance
-            data
-                .map { case (id, point) => (distance.distance(query, point), id) }
-                .sortByKey()
-                .zipWithIndex
-                .filter { case ((_, id), _) => set.value.contains(id) }
-                .take(k)
-                .map { case ((d, id), index) => (id, (index, d)) }
-                .toMap
-        }
-
-        /*val kFuerzaBruta = 100000
-        val realMap2 = time("2 = ") {
-            data
-                .map { case (id, point) => (distance.distance(query, point), id) }
-                .aggregate(new KnnResult())(KnnResult.seqOp(kFuerzaBruta), KnnResult.combOp(kFuerzaBruta))
-                .sorted
-                .zipWithIndex
-                .map { case ((d, id), index) => (id, (index, d)) }
-                .toMap
-        }*/
-
-        result
-            .map { case (d, id) => (id, d, if (realMap.contains(id)) realMap(id)._1 else -1) }
-            .foreach { case (id, d, index) => println(s"  $d - $id - $index") }
     }
 }

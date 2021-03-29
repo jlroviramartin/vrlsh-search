@@ -29,6 +29,8 @@ class EnvelopeDouble(
 
     def sizes: Seq[Double] = min.zip(max).map { case (min, max) => max - min }
 
+    def maxDistance: Double = Math.sqrt(min.zip(max).map { case (min, max) => (max - min) * (max - min) }.sum)
+
     def join(point: Seq[Double]): EnvelopeDouble = {
         if (dimension == 0) {
             new EnvelopeDouble(point)
