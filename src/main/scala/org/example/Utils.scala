@@ -3,17 +3,20 @@ package org.example
 import java.util.concurrent.TimeUnit
 import scala.util.control.NonFatal
 import scala.util.Random
-
 import org.apache.hadoop.yarn.util.RackResolver
 import org.apache.log4j.{Level, Logger}
+import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
-
 import org.example.evaluators.Hash
 import org.example.evaluators.HashPoint
 
+import java.nio.file.{Files, Path, Paths}
+import java.util.Comparator
+import scala.reflect.io.Directory
+
 object Utils {
-    val MIN_TOLERANCE = 0.5 // 0.4
-    val MAX_TOLERANCE = 1.5 // 1.1
+    val MIN_TOLERANCE = 0.4 // 0.5
+    val MAX_TOLERANCE = 1.1 // 1.5
 
     val RANDOM = new Random(0)
 
@@ -166,4 +169,37 @@ object Utils {
             }
         })
     }*/
+
+
+    def splitData(sc: SparkContext, file: Path, trainPercentage: Int, seed: Long = 12345) = {
+        val testPercentage = 100 - trainPercentage
+        val result = sc
+            .textFile(file.toString)
+            .randomSplit(Array(trainPercentage, testPercentage), seed)
+        var name = file.getFileName.toString
+        if (name.endsWith(".csv")) {
+            name = name.substring(0, name.length - ".csv".length)
+        }
+
+        val dir1 = file.getParent.resolve(name + s"_$trainPercentage")
+        val dir2 = file.getParent.resolve(name + s"_$testPercentage")
+        result(0)
+            .repartition(1)
+            .saveAsTextFile(dir1.toString)
+        result(1)
+            .repartition(1)
+            .saveAsTextFile(dir2.toString)
+
+
+        val file1 = dir1.getParent.resolve(dir1.getFileName.toString + ".csv")
+        val file2 = dir2.getParent.resolve(dir2.getFileName.toString + ".csv")
+        Files.deleteIfExists(file1)
+        Files.deleteIfExists(file2)
+
+        Files.move(dir1.resolve("part-00000"), file1)
+        Files.move(dir2.resolve("part-00000"), file2)
+
+        new Directory(dir1.toFile).deleteRecursively()
+        new Directory(dir2.toFile).deleteRecursively()
+    }
 }

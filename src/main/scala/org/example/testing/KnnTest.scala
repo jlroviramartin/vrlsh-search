@@ -1,15 +1,15 @@
-package org.example
+package org.example.testing
 
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.rdd.RDD
-import org.example.Utils.time
-import org.example.construction.{KnnConstructionAlgorithm, KnnQuery, MyKnnQuerySerializator}
+import org.example.Errors.{globalDistanceError, globalIndexError, localDistanceError, localIndexError}
 import org.example.Utils.RANDOM
+import org.example.construction.{KnnConstructionAlgorithm, KnnQuery, MyKnnQuerySerializator}
+import org.example.{DataStore, EnvelopeDouble, KnnEuclideanDistance, KnnResult}
 
 import java.nio.file.{Files, Path}
 import scala.collection.Seq
 import scala.reflect.io.Directory
-import org.example.Errors._
 
 object KnnTest {
 
@@ -55,32 +55,18 @@ object KnnTest {
         println(f"Max distance approx.: ${envelope.maxDistance}%1.5f")
         println()
 
-        // Se construye/deserializa el objeto knnQuery
-        val knnQuery: KnnQuery = if (false) {
-            val distance = new KnnEuclideanDistance
-            val knnQuery = {
-                // Se limpian los datos antiguos
-                val directory = new Directory(baseDirectory.toFile)
-                directory.deleteRecursively()
-
-                new KnnConstructionAlgorithm(desiredSize, baseDirectory.toString, distance).build(data)
-            }
-
-            DataStore.kstore(
-                baseDirectory.resolve("KnnQuery.dat"),
-                knnQuery.getSerializable())
-
-            knnQuery
-        } else {
-            val sc = data.sparkContext
-
-            val knnQuery = DataStore.kload(
-                baseDirectory.resolve("KnnQuery.dat"),
-                classOf[MyKnnQuerySerializator]).get(sc)
-            knnQuery
-        }
-
+        val t = 5
         val k = 10
+        val desiredSize = t * k
+        val distance = new KnnEuclideanDistance
+
+        // Se construye/deserializa el objeto knnQuery
+        val knnQuery = KnnConstructionAlgorithm.createOrLoad(
+            data,
+            desiredSize,
+            distance,
+            baseDirectory)
+
         val testExact = 50
         val testInside = 500
         val testOutside = 500

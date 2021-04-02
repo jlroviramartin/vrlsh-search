@@ -2,15 +2,16 @@ package org.example.construction
 
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.rdd.RDD
-import org.example.{BroadcastLookupProvider, EnvelopeDouble, HashOptions, KnnDistance, KnnResult, Utils}
+import org.example.{BroadcastLookupProvider, DataStore, EnvelopeDouble, HashOptions, KnnDistance, KnnEuclideanDistance, KnnResult, Utils}
 import org.example.Utils.time
 import org.example.evaluators.{Hash, Hasher}
 import org.apache.spark.SparkContext
 import Utils._
 
-import java.nio.file.Paths
+import java.nio.file.{Paths, Path}
 import java.util.Optional
 import scala.collection.immutable.Iterable
+import scala.reflect.io.Directory
 import scala.util.control.Breaks
 
 class KnnConstructionAlgorithm(val desiredSize: Int,
@@ -226,6 +227,43 @@ class KnnConstructionAlgorithm(val desiredSize: Int,
             val max = maxEnvelopes.map(_._2).max()
             println(s"    Envelopes Min: $min Max: $max")
         }
+    }
+}
+
+object KnnConstructionAlgorithm {
+    /**
+     * Tomando como directorio base {@code baseDirectory}:
+     * si el directorio no existe, crea un nuevo modelo KnnQuery y lo almacena en dicho directorio;
+     * en caso contrario, lo carga.
+     */
+    def createOrLoad(data: RDD[(Long, Vector)],
+                     desiredSize: Int,
+                     distance: KnnDistance,
+                     baseDirectory: Path): KnnQuery = {
+        val directory = new Directory(baseDirectory.toFile)
+        val knnQuery: KnnQuery =
+            if (!directory.exists) {
+                // Se limpian los datos antiguos
+                //val directory = new Directory(baseDirectory.toFile)
+                //directory.deleteRecursively()
+                val knnQuery = new KnnConstructionAlgorithm(desiredSize, baseDirectory.toString, distance).build(data)
+
+                // Alacena el modelo
+                DataStore.kstore(
+                    baseDirectory.resolve("KnnQuery.dat"),
+                    knnQuery.getSerializable())
+
+                knnQuery
+            }
+            else {
+                val sc = data.sparkContext
+
+                val knnQuery = DataStore.kload(
+                    baseDirectory.resolve("KnnQuery.dat"),
+                    classOf[MyKnnQuerySerializator]).get(sc)
+                knnQuery
+            }
+        knnQuery
     }
 }
 

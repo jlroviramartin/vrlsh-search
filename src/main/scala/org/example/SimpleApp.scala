@@ -1,12 +1,14 @@
 package org.example
 
+import org.apache.spark.SparkContext
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
+import org.example.testing.KnnTest
 
-import java.nio.file.{Files, Paths}
+import java.nio.file.{Files, Path, Paths}
 
 // How to turn off INFO logging in Spark? https://stackoverflow.com/a/26123496
 object SimpleApp {
@@ -40,35 +42,15 @@ object SimpleApp {
             .getOrCreate()
         val sc = spark.sparkContext
 
-
         /*
-        val result = sc
-            .textFile(Paths.get("C:", "Users", "joseluis", "OneDrive", "TFM", "dataset", "shape_NonIndexed.csv").toString)
-            .randomSplit(Array(0.9, 0.1), seed = 12345)
-        result(0)
-            .repartition(1)
-            .saveAsTextFile(Paths.get("C:", "Users", "joseluis", "OneDrive", "TFM", "dataset", "shape_NonIndexed.csv_p9.csv").toString)
-        result(1)
-            .repartition(1)
-            .saveAsTextFile(Paths.get("C:", "Users", "joseluis", "OneDrive", "TFM", "dataset", "shape_NonIndexed.csv_p1.csv").toString)
+        Utils.splitData(
+            sc,
+            Paths.get("C:", "Users", "joseluis", "OneDrive", "TFM", "dataset", "shape", "shape_i.csv"),
+            77
+        )
         */
 
-
-        val data: RDD[(Long, Vector)] = if (true) {
-            sc.textFile(fileToRead.toString)
-                .map(line => {
-                    val args = line.split(',')
-                    val id = args(0).toLong
-                    val values = (1 until args.length).map(i => args(i).toDouble).toArray
-                    (id, Vectors.dense(values))
-                })
-        } else {
-            // No funciona ???
-            MLUtils.loadLibSVMFile(sc, fileToRead.toString)
-                .zipWithIndex()
-                .map(_.swap)
-                .map { case (id, labelPoint) => (id, Vectors.dense(labelPoint.features.toArray)) }
-        }
+        val data = readDataFile(sc, fileToRead)
 
         // Se calcula el recubrimiento
         val envelope = data
@@ -82,5 +64,24 @@ object SimpleApp {
         KnnTest.testSet1(envelope, data.cache(), baseDirectory, desiredSize)
         //KnnTest.testSet2(data, baseDirectory, desiredSize, 10, 10)
         spark.stop()
+    }
+
+    def readDataFile(sc: SparkContext, file: Path): RDD[(Long, Vector)] = {
+        val data: RDD[(Long, Vector)] = if (true) {
+            sc.textFile(file.toString)
+                .map(line => {
+                    val args = line.split(',')
+                    val id = args(0).toLong
+                    val values = (1 until args.length).map(i => args(i).toDouble).toArray
+                    (id, Vectors.dense(values))
+                })
+        } else {
+            // No funciona ???
+            MLUtils.loadLibSVMFile(sc, file.toString)
+                .zipWithIndex()
+                .map(_.swap)
+                .map { case (id, labelPoint) => (id, Vectors.dense(labelPoint.features.toArray)) }
+        }
+        data
     }
 }
