@@ -170,8 +170,11 @@ object Utils {
         })
     }*/
 
+    def splitDataByFilename(sc: SparkContext, file: String, trainPercentage: Int, seed: Long = 12345): Unit = {
+        splitData(sc, Paths.get(file), trainPercentage, seed)
+    }
 
-    def splitData(sc: SparkContext, file: Path, trainPercentage: Int, seed: Long = 12345) = {
+    def splitData(sc: SparkContext, file: Path, trainPercentage: Int, seed: Long = 12345): Unit = {
         val testPercentage = 100 - trainPercentage
         val result = sc
             .textFile(file.toString)

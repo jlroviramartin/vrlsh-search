@@ -13,6 +13,56 @@ import java.nio.file.{Files, Path, Paths}
 // How to turn off INFO logging in Spark? https://stackoverflow.com/a/26123496
 object SimpleApp {
     def main(args: Array[String]) {
+        val spark = initSpark()
+        val sc = spark.sparkContext
+
+        //Utils.splitDataByFilename(sc, "C:/Users/joseluis/OneDrive/TFM/dataset/corel/corel_i1.csv", 90)
+        //Utils.splitDataByFilename(sc, "C:/Users/joseluis/OneDrive/TFM/dataset/shape/shape_i1.csv", 90)
+        //Utils.splitDataByFilename(sc, "C:/Users/joseluis/OneDrive/TFM/dataset/audio/audio_i1.csv", 90)
+
+        //val fileToRead = "hdfs://namenode:9000/test.txt"
+        //val fileToRead = Paths.get("C:/Users/joseluis/OneDrive/TFM/dataset/HIGGS_head_numbered_100000.csv")
+
+        //val fileToRead = Paths.get("C:/Users/joseluis/OneDrive/TFM/dataset/corel/corel_i1.csv")
+        //val fileToRead = Paths.get("C:/Users/joseluis/OneDrive/TFM/dataset/shape/shape_i1.csv")
+        //val fileToRead = Paths.get("C:/Users/joseluis/OneDrive/TFM/dataset/audio/audio_i1.csv")
+
+        //val testing = readDataFileByFilename(sc, "C:/Users/joseluis/OneDrive/TFM/dataset/corel/corel_i1_10.csv")
+
+        Files.createDirectories(Paths.get("C:/Temp/knn/"))
+
+        List("corel", "shape", "audio").foreach { name =>
+            println(s"===== $name =====")
+            val data = readDataFileByFilename(sc, s"C:/Users/joseluis/OneDrive/TFM/dataset/$name/${name}_i1_90.csv")
+            val testing = readDataFileByFilename(sc, s"C:/Users/joseluis/OneDrive/TFM/dataset/$name/${name}_i1_10.csv")
+                .map { case (id, point) => point }
+                .takeSample(withReplacement = false, 10)
+
+            List(3, 10, 50, 200).foreach { k =>
+                println(s"===== $k =====")
+
+                val baseDirectory = Paths.get(s"C:/Temp/$name/$k")
+                if (false) {
+                    KnnTest.prepareData_v2(data, baseDirectory, k)
+                } else {
+                    KnnTest.testSet_v2(data, baseDirectory, testing, k)
+                }
+            }
+        }
+
+        /*val k = 10
+        val baseDirectory = Paths.get(s"C:/Temp/knn/knn_$k/")
+        KnnTest.testSet_v2(data,
+            baseDirectory,
+            testing.map(row => row._2).collect(),
+            k)*/
+
+        //KnnTest.testSet_v2(envelope, data.cache(), baseDirectory, desiredSize)
+        //KnnTest.testSet2(data, baseDirectory, desiredSize, 10, 10)
+        spark.stop()
+    }
+
+    def initSpark(): SparkSession = {
         // https://dzone.com/articles/working-on-apache-spark-on-windows
         // https://stackoverflow.com/questions/35652665/java-io-ioexception-could-not-locate-executable-null-bin-winutils-exe-in-the-ha
         // https://medium.com/big-data-engineering/how-to-install-apache-spark-2-x-in-your-pc-e2047246ffc3
@@ -26,13 +76,6 @@ object SimpleApp {
 
         Utils.quiet_logs()
 
-        //val fileToRead = "hdfs://namenode:9000/test.txt"
-        //val fileToRead = Paths.get("C:", "Users", "joseluis", "OneDrive", "TFM", "dataset", "HIGGS_head_numbered_100000.csv")
-        val fileToRead = Paths.get("C:", "Users", "joseluis", "OneDrive", "TFM", "dataset", "corel.csv")
-
-        val baseDirectory = Paths.get("C:", "Temp", "scala")
-        Files.createDirectories(baseDirectory)
-
         val spark = SparkSession.builder
             .appName("Simple Application")
             .config("spark.master", "local")
@@ -40,30 +83,12 @@ object SimpleApp {
             .config("spark.kryoserializer.buffer", "64m")
             .config("spark.kryoserializer.buffer.max", "128m")
             .getOrCreate()
-        val sc = spark.sparkContext
 
-        /*
-        Utils.splitData(
-            sc,
-            Paths.get("C:", "Users", "joseluis", "OneDrive", "TFM", "dataset", "shape", "shape_i.csv"),
-            77
-        )
-        */
+        spark
+    }
 
-        val data = readDataFile(sc, fileToRead)
-
-        // Se calcula el recubrimiento
-        val envelope = data
-            .map { case (_, point) => point }
-            .aggregate(EnvelopeDouble.EMPTY)(
-                EnvelopeDouble.seqOp,
-                EnvelopeDouble.combOp)
-
-        val desiredSize = 100
-
-        KnnTest.testSet1(envelope, data.cache(), baseDirectory, desiredSize)
-        //KnnTest.testSet2(data, baseDirectory, desiredSize, 10, 10)
-        spark.stop()
+    def readDataFileByFilename(sc: SparkContext, file: String): RDD[(Long, Vector)] = {
+        readDataFile(sc, Paths.get(file))
     }
 
     def readDataFile(sc: SparkContext, file: Path): RDD[(Long, Vector)] = {

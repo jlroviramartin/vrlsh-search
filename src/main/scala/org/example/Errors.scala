@@ -2,6 +2,18 @@ package org.example
 
 import scala.collection.immutable.Iterable
 
+trait IndexError {
+    def evaluate(index: Long, realIndex: Long) : Double;
+}
+
+trait DistanceError {
+    def evaluate(distance: Double, realDistance: Double) : Double;
+}
+
+trait PointError {
+    def evaluate(point: Double, realPoint: Double) : Double;
+}
+
 object Errors {
 
     /**
@@ -9,11 +21,10 @@ object Errors {
      *
      * @param index     Índice según el algoritmo.
      * @param realIndex Índice real del punto.
-     * @param k         K.
      * @param count     Número de puntos.
      * @return Error por índice.
      */
-    def localIndexError(index: Long, realIndex: Long, k: Int, count: Long): Double = {
+    def localIndexError(index: Long, realIndex: Long, count: Long): Double = {
         (realIndex - index).toDouble / (count - 1).toDouble
     }
 

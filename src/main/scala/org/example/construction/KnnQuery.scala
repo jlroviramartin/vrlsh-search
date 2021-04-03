@@ -6,12 +6,14 @@ import org.apache.spark.ml.linalg.Vector
 import scala.collection.immutable.Iterable
 
 trait KnnQuery {
-    def query(point: Vector, k: Int): Iterable[(Double, Long)]
+    def query(point: Vector, k: Int, statistics: StatisticsCollector): Iterable[(Double, Long)]
 
     /**
-     * Permite serializa la consulta y los datos.
+     * Permite serializar la consulta y los datos.
      */
     def getSerializable(): KnnQuerySerializable
+
+    def printResume()
 }
 
 trait KnnQuerySerializable extends Serializable {

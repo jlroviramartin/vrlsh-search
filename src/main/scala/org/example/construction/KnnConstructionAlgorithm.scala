@@ -179,7 +179,7 @@ class KnnConstructionAlgorithm(val desiredSize: Int,
         data.saveAsObjectFile(dataFile)
         result.saveAsObjectFile(modelFile)
 
-        new MyKnnQuery(baseDirectory, data, result, hasherMap, lookupProvider, distance)
+        new MyKnnQuery(baseDirectory, /*data,*/ result, hasherMap, lookupProvider, distance)
     }
 
     private def showStatistics(hashWithNumPoints: RDD[(Hash, Int)], bucketCondition: Int => Boolean): Unit = {
@@ -243,9 +243,6 @@ object KnnConstructionAlgorithm {
         val directory = new Directory(baseDirectory.toFile)
         val knnQuery: KnnQuery =
             if (!directory.exists) {
-                // Se limpian los datos antiguos
-                //val directory = new Directory(baseDirectory.toFile)
-                //directory.deleteRecursively()
                 val knnQuery = new KnnConstructionAlgorithm(desiredSize, baseDirectory.toString, distance).build(data)
 
                 // Alacena el modelo
@@ -268,19 +265,44 @@ object KnnConstructionAlgorithm {
 }
 
 class MyKnnQuery(val baseDirectory: String,
-                 val data: RDD[(Long, Vector)],
-                 val result: RDD[(Double, Hash, List[Long])],
+                 //val result: RDD[(Double, Hash, List[Long])],
                  val hasherMap: KnnMetadata,
                  val lookupProvider: BroadcastLookupProvider,
                  val distance: KnnDistance)
-    extends KnnQuery /*with Serializable*/ {
+    extends KnnQuery {
 
-    var radius: Seq[Double] = hasherMap.radius
+    var radiuses: Seq[Double] = hasherMap.radiuses
+    /*var mapForRadius: Map[Double, RDD[(Hash, List[Long])]] = Map()*/
 
-    var mapForRadius: Map[Double, RDD[(Hash, List[Long])]] = Map()
+    var map: scala.collection.Map[(Double, Hash), Array[Long]] = Map()
+    var map2: scala.collection.Map[Double, Map[Hash, Array[Long]]] = Map()
 
-    def init() = {
-        this.mapForRadius = this.radius
+    def this(baseDirectory: String,
+             result: RDD[(Double, Hash, List[Long])],
+             hasherMap: KnnMetadata,
+             lookupProvider: BroadcastLookupProvider,
+             distance: KnnDistance) = {
+        this(baseDirectory, hasherMap, lookupProvider, distance)
+
+        map = result.map { case (radius, hash, points) => ((radius, hash), points.toArray) }
+            .collectAsMap()
+
+        map2 = result.map { case (radius, hash, points) => (radius, (hash, points.toArray)) }
+            .groupByKey()
+            .map { case (radius, it) => (radius, it.toMap) }
+            .collectAsMap()
+
+        radiuses = result
+            .map { case (radius, hash, points) => radius }
+            .aggregate(Set[Double]())(
+                (accumulator, b) => accumulator + b,
+                (accumulator1, accumulator2) => accumulator1 ++ accumulator2)
+            .toList
+            .sorted
+    }
+
+    /*def init() = {
+        this.mapForRadius = this.radiuses
             .map(r => (r, result.filter { case (radius, _, _) => r == radius }
                 .map { case (_, hash, ids) => (hash, ids) }
                 .cache()))
@@ -288,59 +310,77 @@ class MyKnnQuery(val baseDirectory: String,
             .toMap
     }
 
-    init()
+    init()*/
 
-    def query(point: Vector, k: Int): Iterable[(Double, Long)] = {
+    def query(point: Vector, k: Int, statistics: StatisticsCollector): Iterable[(Double, Long)] = {
         val distance = this.distance
         val lookupProvider = this.lookupProvider
 
         var knnResult = new KnnResult()
 
-        val it = this.radius.toIterator
-        var i = 0
-        while (it.hasNext && knnResult.size < k) {
-            val r = it.next()
+        // Radios en los que se han encontrado puntos (son parte de la solución)
+        var radiusesInResult: List[Double] = List()
 
-            val queries = hasherMap.getHasher(r) match {
-                case Some(hasher) => hasher.hash(point, r).toSet
+        // Número de niveles recorridos
+        var numLevels = 0
+
+        val breakableLoop = new Breaks()
+        breakableLoop.breakable {
+            for (radius <- this.radiuses) {
+                numLevels = numLevels + 1
+
+                // Evaluate remaining points
+                val kremaining = k - knnResult.size
+                val knnPartialResult = hasherMap
+                    .getHasher(radius)
+                    .get.hash(point, radius)
+                    .map(hash => this.map.getOrElse((radius, hash), Array[Long]()).map(id => (distance.distance(point, lookupProvider.lookup(id)), id)))
+                    .aggregate(new KnnResult())(KnnResult.seqOpOfArray(kremaining), KnnResult.combOp(kremaining))
+
+                // Combine the total solution with the partial one
+                if (knnPartialResult.size > 0) {
+                    radiusesInResult = radiusesInResult :+ radius
+                    knnResult = KnnResult.combOp(k)(knnResult, knnPartialResult)
+                }
+
+                // Found enough points
+                if (knnResult.size == k) {
+                    breakableLoop.break
+                }
             }
-
-            val kremaining = k - knnResult.size
-            val aux = {
-                mapForRadius(r)
-                    .filter { case (hash, _) => queries.contains(hash) }
-                    .flatMap { case (_, ids) => ids }
-                    .map(id => (distance.distance(point, lookupProvider.lookup(id)), id))
-                    .aggregate(new KnnResult())(KnnResult.seqOp(kremaining), KnnResult.combOp(kremaining))
-                /*
-                result
-                    //.filter { case (radius, hash, _) => r == radius && queries.contains(hash) }
-                    //.map { case (_, _, ids) => ids.map(id => (distance.distance(point, lookupProvider.lookup(id)), id)) }
-                    //.aggregate(new KnnResult())(KnnResult.seqOpOfList(kremaining), KnnResult.combOp(kremaining))
-                    .flatMap { case (_, _, ids) => ids }
-                    .map(id => (distance.distance(point, lookupProvider.lookup(id)), id))
-                    .aggregate(new KnnResult())(KnnResult.seqOp(kremaining), KnnResult.combOp(kremaining))
-                */
-            }
-
-            val numPoints = result
-                .filter { case (radius, hash, _) => r == radius && queries.contains(hash) }
-                .flatMap { case (_, _, ids) => ids }
-                .count()
-            if (numPoints > 0) {
-                println(s"Comparisons $numPoints")
-                println()
-            }
-
-            if (aux.size > 0) {
-                //println(s"Encontradas ${aux.size} en radio $r")
-                println(s"Encontradas ${aux.size} en radio $i")
-                println()
-            }
-
-            knnResult = KnnResult.combOp(k)(knnResult, aux)
-            i = i + 1
         }
+
+        statistics.collect(
+            new MyStatisticRow(knnResult.size,
+                knnResult.comparisons,
+                knnResult.buckets,
+                numLevels,
+                radiusesInResult))
+
+        /*val it = this.radiuses.toIterator
+        while (it.hasNext && knnResult.size < k) {
+            val radius = it.next()
+            numLevels = numLevels + 1
+
+            val queries = hasherMap.getHasher(radius) match {
+                case Some(hasher) => hasher.hash(point, radius).toSet
+            }
+
+            // Se calculan los puntos que faltan
+            val kremaining = k - knnResult.size
+            val knnPartialResult = {
+                mapForRadius(radius)
+                    .filter { case (hash, _) => queries.contains(hash) }
+                    .map { case (_, ids) => ids.map(id => (distance.distance(point, lookupProvider.lookup(id)), id)) }
+                    .aggregate(new KnnResult())(KnnResult.seqOpOfList(kremaining), KnnResult.combOp(kremaining))
+            }
+
+            if (knnPartialResult.size > 0) {
+                radiusesInResult = radiusesInResult :+ radius
+
+                knnResult = KnnResult.combOp(k)(knnResult, knnPartialResult)
+            }
+        }*/
 
         /*val breakableLoop = new Breaks()
         breakableLoop.breakable {
@@ -362,7 +402,7 @@ class MyKnnQuery(val baseDirectory: String,
         knnResult.sorted
     }
 
-    def query2(point: Vector, k: Int): Iterable[(Double, Long)] = {
+    /*def query2(point: Vector, k: Int): Iterable[(Double, Long)] = {
 
         /*val distance = this.distance
         val lookupProvider = this.lookupProvider
@@ -378,7 +418,7 @@ class MyKnnQuery(val baseDirectory: String,
             .aggregate(new KnnResult())(KnnResult.seqOp(k), KnnResult.combOp(k))
             .sorted*/
 
-        val queries = this.radius
+        val queries = this.radiuses
             .map(radius => (radius, hasherMap.getHasher(radius)))
             .flatMap { case (radius, Some(hasher)) => hasher.hash(point, radius).map(hash => (radius, hash)) }
             .toSet
@@ -388,12 +428,32 @@ class MyKnnQuery(val baseDirectory: String,
 
         result
             .filter { case (radius, hash, _) => queries.contains((radius, hash)) }
-            .flatMap { case (_, _, ids) => ids.map(id => (distance.distance(point, lookupProvider.lookup(id)), id)) }
-            .aggregate(new KnnResult())(KnnResult.seqOp(k), KnnResult.combOp(k))
+            .map { case (_, _, ids) => ids.map(id => (distance.distance(point, lookupProvider.lookup(id)), id)) }
+            .aggregate(new KnnResult())(KnnResult.seqOpOfList(k), KnnResult.combOp(k))
             .sorted
-    }
+    }*/
 
     def getSerializable(): KnnQuerySerializable = new MyKnnQuerySerializator(this)
+
+    def printResume() = {
+        // Todos los hashers son iguales
+        if (radiuses.nonEmpty) {
+            val hasher = hasherMap.getHasher(radiuses(0)).get
+            println(s"hasher: $hasher")
+            println()
+        }
+
+        println("radius | Num. buckets")
+        println(":- | :-")
+        radiuses.foreach(radius => {
+            val forRadius = map2(radius)
+            val numBuckets = forRadius.size
+            //val hasher = hasherMap.getHasher(radius).get
+
+            println(s"$radius | $numBuckets")
+        })
+        println()
+    }
 }
 
 class MyKnnQuerySerializator(var baseDirectory: String,
@@ -414,6 +474,13 @@ class MyKnnQuerySerializator(var baseDirectory: String,
 
         val lookupProvider = new BroadcastLookupProvider(data)
 
-        new MyKnnQuery(baseDirectory, data, result, hasherMap, lookupProvider, distance)
+        new MyKnnQuery(baseDirectory, /*data,*/ result, hasherMap, lookupProvider, distance)
     }
+}
+
+class MyStatisticRow(val size: Int,
+                     val comparisons: Int,
+                     val buckets: Int,
+                     val numLevels: Int,
+                     val radiuses: List[Double]) extends StatisticsCollector.Row {
 }

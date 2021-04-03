@@ -42,9 +42,7 @@ class DefaultHasher(val evaluators: Array[HashEvaluator])
         evaluators.indices.map(index => hash(index, point, radius))
     }
 
-    override def toString: String = {
-        s"num_tables: $numTables " + firstHashEvaluator.map(_.toString);
-    }
+    override def toString: String = s"num_tables: $numTables ${firstHashEvaluator.map(_.toString)}"
 
     override def hashCode: Int = evaluators.toSeq.hashCode
 
@@ -109,5 +107,5 @@ class EuclideanHasher(val table: Array[Array[Array[Double]]],
         new HashWithIndex(tableIndex, new HashPoint(hash))
     }
 
-    //override def tables: Seq[HashEvaluator] =
+    override def toString: String = s"numTables=$numTables keyLength=$keyLength dimension=$dimension"
 }
