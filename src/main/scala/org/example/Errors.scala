@@ -25,7 +25,7 @@ object Errors {
      * @return Error por índice.
      */
     def localIndexError(index: Long, realIndex: Long, count: Long): Double = {
-        (realIndex - index).toDouble / (count - 1).toDouble
+        Math.abs(realIndex - index).toDouble / (count - 1).toDouble
     }
 
     /**
@@ -37,7 +37,7 @@ object Errors {
      * @return Error por distancia.
      */
     def localDistanceError(distance: Double, realDistance: Double, maxDistance: Double): Double = {
-        (distance - realDistance) / maxDistance
+        Math.abs(distance - realDistance) / maxDistance
     }
 
     /**

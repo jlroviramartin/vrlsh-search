@@ -1,15 +1,12 @@
 package org.example.testing
 
-import org.apache.spark.ml.linalg.{Vector, Vectors}
+import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.rdd.RDD
-import org.example.Errors.{globalDistanceError, globalIndexError, localDistanceError, localIndexError}
-import org.example.Utils.RANDOM
-import org.example.construction.{DefaultStatisticsCollector, KnnConstructionAlgorithm, KnnQuery, MyKnnQuerySerializator}
-import org.example.{DataStore, EnvelopeDouble, KnnDistance, KnnEuclideanDistance, KnnResult}
+import org.example.Utils.{MAX_TOLERANCE, MIN_TOLERANCE, RANDOM}
+import org.example.construction.{DefaultStatisticsCollector, KnnConstructionAlgorithm}
+import org.example.{EnvelopeDouble, KnnEuclideanDistance, KnnEuclideanSquareDistance}
 
-import java.nio.file.{Files, Path}
-import scala.collection.Seq
-import scala.reflect.io.Directory
+import java.nio.file.Path
 import org.example.testing.TestingUtils._
 
 object KnnTest {
@@ -37,7 +34,6 @@ object KnnTest {
         val knnQuery = KnnConstructionAlgorithm.createOrLoad(
             data,
             desiredSize,
-            distanceEvaluator,
             baseDirectory)
 
         val testExact = 50
@@ -52,7 +48,7 @@ object KnnTest {
         val exactStatistics = new DefaultStatisticsCollector()
         val exactErrorCollector = new DefaultErrorCollector(count, maxDistance, k)
         doQueries(knnQuery, data, distanceEvaluator, k, exactQueries.toList, exactStatistics, exactErrorCollector)
-        exactErrorCollector.showAverageOfErrors(k)
+        exactErrorCollector.showAverageOfErrors()
 
         println("## Inside points")
         println()
@@ -62,7 +58,7 @@ object KnnTest {
         val insideStatistics = new DefaultStatisticsCollector()
         val insideErrorCollector = new DefaultErrorCollector(count, maxDistance, k)
         doQueries(knnQuery, data, distanceEvaluator, k, insideQueries.toList, insideStatistics, insideErrorCollector)
-        insideErrorCollector.showAverageOfErrors(k)
+        insideErrorCollector.showAverageOfErrors()
 
         println("## Outside points")
         println()
@@ -72,7 +68,7 @@ object KnnTest {
         val outsideStatistics = new DefaultStatisticsCollector()
         val outsideErrorCollector = new DefaultErrorCollector(count, maxDistance, k)
         doQueries(knnQuery, data, distanceEvaluator, k, outsideQueries.toList, outsideStatistics, outsideErrorCollector)
-        outsideErrorCollector.showAverageOfErrors(k)
+        outsideErrorCollector.showAverageOfErrors()
     }
 
     def prepareData_v2(data: RDD[(Long, Vector)],
@@ -81,7 +77,6 @@ object KnnTest {
                        t: Int = 5): Unit = {
 
         val desiredSize = t * k
-        val distanceEvaluator = new KnnEuclideanDistance
 
         println(f"Desired size: $desiredSize")
         println()
@@ -93,7 +88,6 @@ object KnnTest {
         val knnQuery = KnnConstructionAlgorithm.createOrLoad(
             data,
             desiredSize,
-            distanceEvaluator,
             baseDirectory)
 
         println("==== Buckets =====")
@@ -104,6 +98,7 @@ object KnnTest {
 
     def testSet_v2(data: RDD[(Long, Vector)],
                    baseDirectory: Path,
+                   outputDirectory: Path,
                    queries: Iterable[Vector],
                    k: Int,
                    t: Int = 5): Unit = {
@@ -114,8 +109,10 @@ object KnnTest {
                 EnvelopeDouble.seqOp,
                 EnvelopeDouble.combOp)
 
+        val distanceEvaluator = new KnnEuclideanSquareDistance
+
         val count = data.count()
-        val maxDistance = envelope.maxDistance
+        val maxDistance = envelope.maxDistance(distanceEvaluator)
 
         println(f"Min of axes: ${envelope.sizes.min}%1.5f")
         println()
@@ -123,13 +120,12 @@ object KnnTest {
         println(f"Max of axes: ${envelope.sizes.max}%1.5f")
         println()
 
-        println(f"Max distance approx.: ${envelope.maxDistance}%1.5f")
+        println(f"Max distance approx.: $maxDistance%1.5f")
         println()
 
         val desiredSize = t * k
-        val distanceEvaluator = new KnnEuclideanDistance
 
-        println(f"Desired size: $desiredSize")
+        println(f"Desired size: $desiredSize [${MIN_TOLERANCE * desiredSize}, ${MAX_TOLERANCE * desiredSize}]")
         println()
 
         println("==== Building model =====")
@@ -139,7 +135,6 @@ object KnnTest {
         val knnQuery = KnnConstructionAlgorithm.createOrLoad(
             data,
             desiredSize,
-            distanceEvaluator,
             baseDirectory)
 
         println("==== Buckets =====")
@@ -152,8 +147,13 @@ object KnnTest {
 
         val statistics = new DefaultStatisticsCollector()
         val errorCollector = new DefaultErrorCollector(count, maxDistance, k)
+
         doQueries(knnQuery, data, distanceEvaluator, k, queries.toList, statistics, errorCollector)
 
-        errorCollector.showAverageOfErrors(k)
+        statistics.csv(outputDirectory.resolve("statistics.csv"))
+        errorCollector.csv(outputDirectory.resolve("error.csv"))
+
+        errorCollector.showAverageOfErrors()
     }
+
 }

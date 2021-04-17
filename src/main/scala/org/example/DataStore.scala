@@ -41,9 +41,18 @@ object DataStore {
         result.asInstanceOf[T]
     }
 
+    def kload_v2[T](fileName: String): T = {
+        val input = new Input(new FileInputStream(fileName))
+        val result = kryo.readClassAndObject(input)
+        input.close
+        result.asInstanceOf[T]
+    }
+
     def kstore[T](fileName: Path, toStore: T): Unit = kstore[T](fileName.toString, toStore)
 
     def kload[T](fileName: Path, ttype: Class[T]): T = kload[T](fileName.toString, ttype)
+
+    def kload_v2[T](fileName: Path): T = kload_v2[T](fileName.toString)
 
     def store[T](fileName: String, toStore: T): Unit = {
         val oos = new ObjectOutputStream(new FileOutputStream(fileName))

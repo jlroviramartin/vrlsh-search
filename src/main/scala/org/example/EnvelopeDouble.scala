@@ -1,6 +1,6 @@
 package org.example
 
-import org.apache.spark.ml.linalg.Vector
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 
 import java.util.Arrays
 import Array._
@@ -30,6 +30,8 @@ class EnvelopeDouble(
     def sizes: Seq[Double] = min.zip(max).map { case (min, max) => max - min }
 
     def maxDistance: Double = Math.sqrt(min.zip(max).map { case (min, max) => (max - min) * (max - min) }.sum)
+
+    def maxDistance(distanceEvaluator: KnnDistance): Double = distanceEvaluator.distance(Vectors.dense(min), Vectors.dense(max))
 
     def join(point: Seq[Double]): EnvelopeDouble = {
         if (dimension == 0) {

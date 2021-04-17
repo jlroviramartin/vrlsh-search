@@ -6,9 +6,15 @@ import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
+
 import org.example.testing.KnnTest
 
 import java.nio.file.{Files, Path, Paths}
+import java.util.Date
+import scala.reflect.io.Directory
+
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.FileSystem
 
 // How to turn off INFO logging in Spark? https://stackoverflow.com/a/26123496
 object SimpleApp {
@@ -22,7 +28,6 @@ object SimpleApp {
 
         //val fileToRead = "hdfs://namenode:9000/test.txt"
         //val fileToRead = Paths.get("C:/Users/joseluis/OneDrive/TFM/dataset/HIGGS_head_numbered_100000.csv")
-
         //val fileToRead = Paths.get("C:/Users/joseluis/OneDrive/TFM/dataset/corel/corel_i1.csv")
         //val fileToRead = Paths.get("C:/Users/joseluis/OneDrive/TFM/dataset/shape/shape_i1.csv")
         //val fileToRead = Paths.get("C:/Users/joseluis/OneDrive/TFM/dataset/audio/audio_i1.csv")
@@ -31,35 +36,59 @@ object SimpleApp {
 
         Files.createDirectories(Paths.get("C:/Temp/knn/"))
 
+        println(s"Start: ${new Date(System.currentTimeMillis())}")
+
         List("corel", "shape", "audio").foreach { name =>
             println(s"===== $name =====")
+
+            // Dataset
             val data = readDataFileByFilename(sc, s"C:/Users/joseluis/OneDrive/TFM/dataset/$name/${name}_i1_90.csv")
+
+            // Testing data
             val testing = readDataFileByFilename(sc, s"C:/Users/joseluis/OneDrive/TFM/dataset/$name/${name}_i1_10.csv")
                 .map { case (id, point) => point }
-                .takeSample(withReplacement = false, 10)
+                .takeSample(withReplacement = false, 100, Utils.RANDOM.nextLong())
 
-            List(3, 10, 50, 200).foreach { k =>
-                println(s"===== $k =====")
+            //List(3, 10, 50, 200).foreach { k =>
+            List(5, 10, 20).foreach { t =>
+                println(s"===== $t: ${new Date(System.currentTimeMillis())} =====")
 
-                val baseDirectory = Paths.get(s"C:/Temp/$name/$k")
-                if (false) {
-                    KnnTest.prepareData_v2(data, baseDirectory, k)
-                } else {
-                    KnnTest.testSet_v2(data, baseDirectory, testing, k)
+                List(4, 16, 64, 256).foreach { k =>
+                    println(s"===== $k: ${new Date(System.currentTimeMillis())} =====")
+
+                    val outputDirectory = Paths.get(s"C:/Users/joseluis/OneDrive/TFM/dataset/$name/$t/$k")
+                    Files.createDirectories(outputDirectory)
+
+                    val baseDirectory = Paths.get(s"C:/Temp/$name/$t/$k")
+                    if (false) {
+                        KnnTest.prepareData_v2(data, baseDirectory, k, t)
+                    } else {
+                        KnnTest.testSet_v2(data, baseDirectory, outputDirectory, testing, k, t)
+                    }
                 }
             }
         }
 
-        /*val k = 10
-        val baseDirectory = Paths.get(s"C:/Temp/knn/knn_$k/")
-        KnnTest.testSet_v2(data,
-            baseDirectory,
-            testing.map(row => row._2).collect(),
-            k)*/
+        println(s"Finish: ${new Date(System.currentTimeMillis())}")
 
-        //KnnTest.testSet_v2(envelope, data.cache(), baseDirectory, desiredSize)
-        //KnnTest.testSet2(data, baseDirectory, desiredSize, 10, 10)
         spark.stop()
+    }
+
+    def copyToHdfs(): Unit = {
+        val hadoopConf = new Configuration()
+        val hdfs = FileSystem.get(hadoopConf)
+
+        List("corel", "shape", "audio").foreach { name =>
+            println(s"===== Copiando $name =====")
+
+            val srcDataset = new org.apache.hadoop.fs.Path(s"C:/Users/joseluis/OneDrive/TFM/dataset/$name/${name}_i1_90.csv")
+            val destDataset = new org.apache.hadoop.fs.Path(s"/dataset/$name/${name}_i1_90.csv")
+            hdfs.copyFromLocalFile(srcDataset, destDataset)
+
+            val srcTesting = new org.apache.hadoop.fs.Path(s"C:/Users/joseluis/OneDrive/TFM/dataset/$name/${name}_i1_10.csv")
+            val destTesting = new org.apache.hadoop.fs.Path(s"/dataset/$name/${name}_i1_10.csv")
+            hdfs.copyFromLocalFile(srcTesting, destTesting)
+        }
     }
 
     def initSpark(): SparkSession = {
@@ -78,10 +107,14 @@ object SimpleApp {
 
         val spark = SparkSession.builder
             .appName("Simple Application")
+            .config("spark.driver.cores", "10")
+            .config("spark.driver.memory", "16g")
+            .config("spark.executor.cores", "10")
+            .config("spark.executor.memory", "16g")
             .config("spark.master", "local")
             .config("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
             .config("spark.kryoserializer.buffer", "64m")
-            .config("spark.kryoserializer.buffer.max", "128m")
+            .config("spark.kryoserializer.buffer.max", "1024m") // 128m
             .getOrCreate()
 
         spark
