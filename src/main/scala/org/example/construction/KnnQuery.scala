@@ -7,7 +7,10 @@ import org.example.KnnDistance
 import scala.collection.immutable.Iterable
 
 trait KnnQuery {
-    def query(point: Vector, k: Int, distanceEvaluator: KnnDistance, statistics: StatisticsCollector): Iterable[(Double, Long)]
+    def query(point: Vector,
+              k: Int,
+              distanceEvaluator: KnnDistance,
+              statistics: StatisticsCollector): Iterable[(Double, Long)]
 
     /**
      * Permite serializar la consulta y los datos.

@@ -86,4 +86,12 @@ object EnvelopeDouble {
     def seqOp(accumulator: EnvelopeDouble, point: Vector): EnvelopeDouble = accumulator.join(point)
 
     def combOp(accumulator1: EnvelopeDouble, accumulator2: EnvelopeDouble): EnvelopeDouble = accumulator1.join(accumulator2)
+
+    def normalize(envelope: EnvelopeDouble, point: Vector): Vector = {
+        val v = point.toDense
+        Vectors.dense(
+            envelope.indices.map(i => {
+                (v(i) - envelope.min(i)) / (envelope.max(i) - envelope.min(i))
+            }).toArray)
+    }
 }

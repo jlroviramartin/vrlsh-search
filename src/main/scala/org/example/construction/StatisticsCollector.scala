@@ -22,18 +22,18 @@ object StatisticsCollector {
 }
 
 class DefaultStatisticsCollector(var statistics: List[StatisticsCollector.Row] = List()) extends StatisticsCollector {
-    def collect(row: StatisticsCollector.Row) = statistics = statistics :+ row
+    def collect(row: StatisticsCollector.Row): Unit = statistics = statistics :+ row
 
-    def csv(file: Path) = {
+    def csv(file: Path): Unit = {
         if (statistics.nonEmpty) {
-            val first = statistics(0)
+            val first = statistics.head
             val headers = first.headers().toArray
 
             val settings = new CsvWriterSettings
             settings.setHeaders(headers: _*)
             settings.setHeaderWritingEnabled(true)
-            settings.getFormat().setDelimiter(",")
-            settings.getFormat().setLineSeparator("\n")
+            settings.getFormat.setDelimiter(",")
+            settings.getFormat.setLineSeparator("\n")
 
             val csvWriter = new CsvWriter(file.toFile, StandardCharsets.UTF_8, settings)
             statistics.foreach(row => {

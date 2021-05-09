@@ -11,7 +11,6 @@ object App {
 
     def main(args: Array[String]) {
 
-
         var list1= List(100, 400, 200, 500, 100, 1900, 2000, 400, 400, 19000)
         println("list before group by is  ::")
         println(list1)

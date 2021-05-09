@@ -8,12 +8,12 @@ import org.apache.spark.rdd.RDD
  */
 trait HashEvaluator extends Serializable {
 
-    def hash(v: Vector, radius: Double): Hash;
+    def hash(v: Vector, radius: Double): Hash
 
     final def hashData(data: RDD[(Long, Vector)], radius: Double): RDD[(Long, Hash)] = {
         val bthis = data.sparkContext.broadcast(this)
 
-        data.map({ case (id, point) => (id, bthis.value.hash(point, radius)) });
+        data.map({ case (id, point) => (id, bthis.value.hash(point, radius)) })
     }
 
     final def sizesByHash(data: RDD[(Long, Vector)],

@@ -1,8 +1,6 @@
 package org.example
 
-import org.example.SimpleApp.{initSpark, readDataFileByFilename}
-import org.example.testing.KnnTest
-import org.example.testing.TestingUtils.doRealQueries_v2
+import org.example.testing.{TestOptions, TestingUtils}
 
 import java.nio.file.{Files, Paths}
 import java.util.Date
@@ -10,20 +8,22 @@ import java.util.Date
 object AppRealKnn {
 
     def main(args: Array[String]) {
-        val spark = initSpark()
+        val spark = SparkUtils.initSpark()
         val sc = spark.sparkContext
+
+        val testOptions = new TestOptions()
+        testOptions.ks = Array(20)
 
         val distanceEvaluator = new KnnEuclideanSquareDistance
 
-        List("corel"/*, "shape", "audio"*/).foreach { name =>
+        testOptions.datasets.foreach { name =>
             println(s"===== $name =====")
 
             // Dataset
-            val data = readDataFileByFilename(sc, s"C:/Users/joseluis/OneDrive/TFM/dataset/$name/${name}_i1_90.csv")
+            val data = testOptions.loadDataFile(sc, name)
 
             // Testing data
-            val testing = readDataFileByFilename(sc, s"C:/Users/joseluis/OneDrive/TFM/dataset/$name/${name}_i1_10.csv")
-            //    .takeSample(withReplacement = false, 10, Utils.RANDOM.nextLong())
+            val testing = testOptions.loadTestFileWithId(sc, name)
 
             val k = 10000
             println(s"===== $k: ${new Date(System.currentTimeMillis())} =====")
@@ -33,12 +33,12 @@ object AppRealKnn {
 
             var i = 0
             val part = 1000
-            testing.collect().sliding(part, part)
+            testing.sliding(part, part)
                 .foreach(slide => {
                     println(s"== ${i * part}")
-                    if (i > 36) {
+                    if (i > 44) {
 
-                        val result = doRealQueries_v2(data, distanceEvaluator, k, slide)
+                        val result = TestingUtils.doGroundTruth(data, distanceEvaluator, k, slide)
                             .toMap
 
                         println()

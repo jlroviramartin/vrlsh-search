@@ -16,4 +16,6 @@ class BroadcastLookupProvider(bdata: Broadcast[scala.collection.Map[Long, Vector
     }
 
     def lookup(index: Long): Vector = bdata.value(index.toInt)
+
+    def size: Int = bdata.value.size
 }

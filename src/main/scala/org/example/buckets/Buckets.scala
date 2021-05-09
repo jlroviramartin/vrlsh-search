@@ -11,7 +11,7 @@ class Buckets(val hashEvaluator: HashEvaluator,
     extends Serializable {
 
     def put(point: Vector, resolution: Double): Unit = {
-        val hash = hashEvaluator.hash(point, resolution);
+        val hash = hashEvaluator.hash(point, resolution)
 
         map.get(resolution) match {
             case Some(map) => map.get(hash) match {

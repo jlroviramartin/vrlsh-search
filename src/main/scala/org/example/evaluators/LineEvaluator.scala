@@ -26,7 +26,7 @@ class LineEvaluator(val w: Array[Double], val b: Double)
             random.nextGaussian)
     }
 
-    def this(options: HashOptions) = this(options.random, options.dim);
+    def this(options: HashOptions) = this(options.random, options.dim)
 
     def dimension: Int = w.length
 
@@ -35,13 +35,15 @@ class LineEvaluator(val w: Array[Double], val b: Double)
 
     def evaluate(point: Vector, radius: Double): Double = {
         assert(point.size == dimension)
-        ((0 until dimension).map(i => point(i) * w(i)).sum + b) / radius;
-        //(0 until dimension).map(i => point(i) * w(i)).sum / radius + b;
+        ((0 until dimension).map(i => point(i) * w(i)).sum + b) / radius
+        //(0 until dimension).map(i => point(i) * w(i)).sum / radius + b
     }
 
-    def transform(point: Vector): Double = ((0 until dimension).map(i => point(i) * w(i)).sum + b);
+    def transform(point: Vector): Double = {
+        (0 until dimension).map(i => point(i) * w(i)).sum + b
+    }
 
-    def hashTransformed(transformed: Double, radius: Double): Double = transformed / radius;
+    def hashTransformed(transformed: Double, radius: Double): Double = transformed / radius
 
 
     override def hashCode: Int = w.toSeq.hashCode() ^ b.hashCode()

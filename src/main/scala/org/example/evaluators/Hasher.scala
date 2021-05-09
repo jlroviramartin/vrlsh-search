@@ -12,11 +12,11 @@ trait Hasher extends Serializable {
      * <br>
      * Nota: los hash están indexados según el índice de tabla.
      */
-    def hash(point: Vector, radius: Double): Seq[Hash];
+    def hash(point: Vector, radius: Double): Seq[Hash]
 
     def numTables: Int;
 
-    def hash(tableIndex: Int, point: Vector, radius: Double): Hash;
+    def hash(tableIndex: Int, point: Vector, radius: Double): Hash
 
     //def tables: Seq[HashEvaluator]
 
@@ -37,7 +37,7 @@ trait Hasher extends Serializable {
         data.flatMap({ case (id, point) => bt.value
             .hash(point, radius)
             .map(hash => (id, hash))
-        });
+        })
     }
 
     /**
@@ -97,10 +97,10 @@ trait Hasher extends Serializable {
 }
 
 object Hasher extends Logging {
-    val MIN_TOLERANCE = Utils.MIN_TOLERANCE
-    val MAX_TOLERANCE = Utils.MAX_TOLERANCE
+    val MIN_TOLERANCE: Double = Utils.MIN_TOLERANCE
+    val MAX_TOLERANCE: Double = Utils.MAX_TOLERANCE
 
-    val DEFAULT_RADIUS = 0.1
+    val DEFAULT_RADIUS: Double = 0.1
 
     def getSuitableRadius(data: RDD[(Long, Vector)],
                           hasher: Hasher,
@@ -184,7 +184,7 @@ object Hasher extends Logging {
         while (true) {
             val currentLength = Math.floor((leftLimit + rightLimit) / 2.0).toInt
 
-            logDebug(s"-- currentLength $currentLength");
+            logDebug(s"-- currentLength $currentLength")
 
             val hashOptions = new HashOptions(dimension, currentLength, numTables)
             val hasher = hashOptions.newHasher()
@@ -208,8 +208,8 @@ object Hasher extends Logging {
                         }
 
                         // We start over with a larger the radius
-                        val tmpOptions2 = new HashOptions(dimension, initialKLength, numTables);
-                        val tmpHasher2 = tmpOptions2.newHasher();
+                        val tmpOptions2 = new HashOptions(dimension, initialKLength, numTables)
+                        val tmpHasher2 = tmpOptions2.newHasher()
 
                         radius = getSuitableRadius(currentData, tmpHasher2, radius, None, desiredSize)
                         isRadiusAdjusted = true
@@ -247,8 +247,8 @@ object Hasher extends Logging {
             println(s"keyLength update to ${hashOptions.keyLength} [$leftLimit - $rightLimit] with radius $radius because largestBucket was $largestBucketSize and wanted [${desiredSize * MIN_TOLERANCE} - ${desiredSize * MAX_TOLERANCE}]")
         }
 
-        val hashOptions = new HashOptions(dimension, 1, numTables);
-        val hasher = hashOptions.newHasher();
+        val hashOptions = new HashOptions(dimension, 1, numTables)
+        val hasher = hashOptions.newHasher()
         return (hasher, hashOptions, radius) // Dummy
     }
 
@@ -258,6 +258,6 @@ object Hasher extends Logging {
         val (hasher, hashOptions, radius) = computeBestKeyLength(data, dimension, desiredSize)
 
         println("R0: " + radius + " " + hasher + " desiredSize: " + desiredSize)
-        (hasher, hashOptions, radius);
+        (hasher, hashOptions, radius)
     }
 }

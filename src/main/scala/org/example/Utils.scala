@@ -11,45 +11,45 @@ import org.example.evaluators.Hash
 import org.example.evaluators.HashPoint
 
 import java.nio.file.{Files, Path, Paths}
-import java.util.Comparator
 import scala.reflect.io.Directory
 
 object Utils {
     val MIN_TOLERANCE = 0.4 // 0.5
     val MAX_TOLERANCE = 1.1 // 1.5
 
-    val RANDOM = new Random(0)
+    val RANDOM_SEED = 0
+    val RANDOM = new Random(RANDOM_SEED)
 
-    def log(a: Double, base: Double): Double = Math.log(a) / Math.log(base);
+    def log(a: Double, base: Double): Double = Math.log(a) / Math.log(base)
 
-    def log2(n: Double): Double = Math.log10(n) / Math.log10(2);
+    def log2(n: Double): Double = Math.log10(n) / Math.log10(2)
 
-    def square(x: Double): Double = x * x;
+    def square(x: Double): Double = x * x
 
     def equalsWithTolerance(value: Int, desired: Int): Boolean =
         (value > MIN_TOLERANCE * desired) &&
-            (value < MAX_TOLERANCE * desired);
+            (value < MAX_TOLERANCE * desired)
 
     def equalsWithTolerance[T](values: Iterable[T], desired: Int): Boolean = {
         var count = 0
         values.takeWhile(_ => {
             count += 1
-            (count >= MAX_TOLERANCE * desired)
+            return count >= MAX_TOLERANCE * desired
         })
 
         (count > MIN_TOLERANCE * desired) &&
-            (count < MAX_TOLERANCE * desired);
+            (count < MAX_TOLERANCE * desired)
     }
 
     def equalsWithTolerance[T](values: Iterable[T], min: Int, max: Int): Boolean = {
         var count = 0
         values.takeWhile(_ => {
             count += 1
-            (count >= max)
+            return count >= max
         })
 
         (count > min) &&
-            (count < max);
+            (count < max)
     }
 
     /**
@@ -82,12 +82,12 @@ object Utils {
         val result = block // call-by-name
         val t1 = System.nanoTime()
         val difference = t1 - t0
-        val hours = TimeUnit.NANOSECONDS.toHours(difference);
-        val minutes = TimeUnit.NANOSECONDS.toMinutes(difference) - TimeUnit.HOURS.toMinutes(hours);
-        val seconds = TimeUnit.NANOSECONDS.toSeconds(difference) - TimeUnit.HOURS.toSeconds(hours) - TimeUnit.MINUTES.toSeconds(minutes);
-        val nanos = difference - TimeUnit.MINUTES.toSeconds(minutes) - TimeUnit.HOURS.toNanos(hours) - TimeUnit.MINUTES.toNanos(minutes) - TimeUnit.SECONDS.toNanos(seconds);
+        val hours = TimeUnit.NANOSECONDS.toHours(difference)
+        val minutes = TimeUnit.NANOSECONDS.toMinutes(difference) - TimeUnit.HOURS.toMinutes(hours)
+        val seconds = TimeUnit.NANOSECONDS.toSeconds(difference) - TimeUnit.HOURS.toSeconds(hours) - TimeUnit.MINUTES.toSeconds(minutes)
+        val nanos = difference - TimeUnit.MINUTES.toSeconds(minutes) - TimeUnit.HOURS.toNanos(hours) - TimeUnit.MINUTES.toNanos(minutes) - TimeUnit.SECONDS.toNanos(seconds)
 
-        println(s"${text} - Elapsed time: $hours:$minutes:$seconds,$nanos")
+        println(s"$text - Elapsed time: $hours:$minutes:$seconds,$nanos")
         result
     }
 
@@ -96,16 +96,16 @@ object Utils {
         val result = block // call-by-name
         val t1 = System.nanoTime()
         val difference = t1 - t0
-        val hours = TimeUnit.NANOSECONDS.toHours(difference);
-        val minutes = TimeUnit.NANOSECONDS.toMinutes(difference) - TimeUnit.HOURS.toMinutes(hours);
-        val seconds = TimeUnit.NANOSECONDS.toSeconds(difference) - TimeUnit.HOURS.toSeconds(hours) - TimeUnit.MINUTES.toSeconds(minutes);
-        val nanos = difference - TimeUnit.MINUTES.toSeconds(minutes) - TimeUnit.HOURS.toNanos(hours) - TimeUnit.MINUTES.toNanos(minutes) - TimeUnit.SECONDS.toNanos(seconds);
+        val hours = TimeUnit.NANOSECONDS.toHours(difference)
+        val minutes = TimeUnit.NANOSECONDS.toMinutes(difference) - TimeUnit.HOURS.toMinutes(hours)
+        val seconds = TimeUnit.NANOSECONDS.toSeconds(difference) - TimeUnit.HOURS.toSeconds(hours) - TimeUnit.MINUTES.toSeconds(minutes)
+        val nanos = difference - TimeUnit.MINUTES.toSeconds(minutes) - TimeUnit.HOURS.toNanos(hours) - TimeUnit.MINUTES.toNanos(minutes) - TimeUnit.SECONDS.toNanos(seconds)
 
         println(s"Elapsed time: $hours:$minutes:$seconds,$nanos")
         result
     }
 
-    def quiet_logs() = {
+    def quiet_logs(): Unit = {
         Logger.getLogger(classOf[RackResolver]).getLevel
         Logger.getLogger("org.example").setLevel(Level.ALL)
         Logger.getLogger("org").setLevel(Level.OFF)
@@ -170,11 +170,11 @@ object Utils {
         })
     }*/
 
-    def splitDataByFilename(sc: SparkContext, file: String, trainPercentage: Int, seed: Long = 12345): Unit = {
+    def splitDataByFilename(sc: SparkContext, file: String, trainPercentage: Int, seed: Long = RANDOM_SEED): Unit = {
         splitData(sc, Paths.get(file), trainPercentage, seed)
     }
 
-    def splitData(sc: SparkContext, file: Path, trainPercentage: Int, seed: Long = 12345): Unit = {
+    def splitData(sc: SparkContext, file: Path, trainPercentage: Int, seed: Long = RANDOM_SEED): Unit = {
         val testPercentage = 100 - trainPercentage
         val result = sc
             .textFile(file.toString)

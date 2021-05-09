@@ -11,13 +11,13 @@ import java.nio.file.Path
  */
 trait ErrorCollector {
     // (id: Long, distance: Double, realDistance: Double, index: Int, realIndex: Int)
-    def collect(data: Iterable[(Long, Double, Double, Long, Long)], recall: Double): Unit
+    def collect(data: Iterable[(Long, Double, Double, Double, Long, Long)], recall: Double): Unit
 
     def csv(file: Path): Unit
 }
 
 class DefaultErrorCollector(val count: Long,
-                            val maxDistance: Double,
+                            /*val maxDistance: Double,*/
                             val k: Int) extends ErrorCollector {
 
     /*
@@ -34,16 +34,16 @@ class DefaultErrorCollector(val count: Long,
      * @param data
      */
     // (id: Long, distance: Double, realDistance: Double, index: Int, realIndex: Int)
-    def collect(data: Iterable[(Long, Double, Double, Long, Long)], recall: Double): Unit = {
+    def collect(data: Iterable[(Long, Double, Double, Double, Long, Long)], recall: Double): Unit = {
 
         // Se muestra el resultado como una tabla md
         if (false) {
             println("| distance | id | index | realIndex | index error | distance error |")
             println("| -: | -: | -: | -: | -: | -: |")
             data
-                .foreach { case (id, distance, realDistance, index, realIndex) =>
+                .foreach { case (id, distance, realDistance, maxDistance, index, realIndex) =>
                     val indexError = localIndexError(index, realIndex, count)
-                    val distanceError = localDistanceError(distance, realDistance, maxDistance)
+                    val distanceError = localDistanceError(distance, realDistance, maxDistance /*- realDistance*/)
 
                     println(f"| $distance | $id | $index | $realIndex | $indexError%1.5f | $distanceError%1.5f |")
                 }
@@ -52,9 +52,9 @@ class DefaultErrorCollector(val count: Long,
 
         // Se calculan los errores para cada punto
         val errors = data
-            .map { case (id, distance, realDistance, index, realIndex) =>
+            .map { case (id, distance, realDistance, maxDistance, index, realIndex) =>
                 val indexError = localIndexError(index, realIndex, count)
-                val distanceError = localDistanceError(distance, realDistance, maxDistance)
+                val distanceError = localDistanceError(distance, realDistance, maxDistance /*- realDistance*/)
 
                 (id, indexError, distanceError)
             }
@@ -86,7 +86,7 @@ class DefaultErrorCollector(val count: Long,
         //println(f"Distance error avg.: $avgDistanceError%1.5f")
         //println()
 
-        this.errors = this.errors :+ (avgIndexError, avgDistanceError, errors.size /*size*/ , recall)
+        this.errors = this.errors :+ (avgIndexError, avgDistanceError, errors.size, recall)
     }
 
     def showAllErrors(): Unit = {
