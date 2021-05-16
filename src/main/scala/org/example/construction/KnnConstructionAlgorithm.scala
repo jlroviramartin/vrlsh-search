@@ -4,16 +4,18 @@ import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.rdd.RDD
 import org.example.{BroadcastLookupProvider, DataStore, EnvelopeDouble, KnnDistance, KnnResult, Utils}
 import org.example.Utils.time
-import org.example.evaluators.{Hash, Hasher}
+import org.example.evaluators.{Hash, Hasher, HasherFactory}
 import org.apache.spark.SparkContext
 import Utils._
+import org.apache.spark.storage.StorageLevel
 
 import java.nio.file.{Path, Paths}
 import scala.collection.immutable.Iterable
 import scala.reflect.io.{Directory, File}
 import scala.util.control.Breaks
 
-class KnnConstructionAlgorithm(val desiredSize: Int,
+class KnnConstructionAlgorithm(val hasherFactory: HasherFactory,
+                               val desiredSize: Int,
                                val baseDirectory: String)
     extends KnnConstruction {
 
@@ -30,7 +32,7 @@ class KnnConstructionAlgorithm(val desiredSize: Int,
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         val (hasher, hashOptions, radius) = time(s"desiredSize = $desiredSize tolerance = ($min, $max)") {
-            Hasher.getHasherForDataset(data, dimension, desiredSize)
+            hasherFactory.getHasherForDataset(data, dimension, desiredSize)
         }
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -38,11 +40,16 @@ class KnnConstructionAlgorithm(val desiredSize: Int,
         //var currentHasher = hashOptions.newHasher()
         //var bcurrentHasher = sc.broadcast(currentHasher)
 
+        println("Inicio broadcast")
+
         val lookupProvider = time("Se hace broadcast de los datos") {
             new BroadcastLookupProvider(data)
         }
 
-        var currentIndices = data.map { case (id, _) => id }.cache()
+        println("Fin broadcast")
+
+        var currentIndices = data.map { case (id, _) => id }
+        /*----- .cache()*/
         var currentRadius = radius
         var iteration = 0
 
@@ -53,16 +60,15 @@ class KnnConstructionAlgorithm(val desiredSize: Int,
         val hasherMap = new KnnMetadata()
 
         // Condición para formar un bucket. Aquellos que no la cumplan van a la siguiente ronda.
-        var bucketCondition = (size: Int) => size >= min && size <= max
+        val M = max
+        val m = min
+        var bucketCondition = (size: Int) => size >= m && size <= M
 
-        while (!time("Se comprueba si está vacío") {
-            currentIndices.isEmpty()
-        }) {
+        var count = currentIndices.count()
+
+        while (count > 0) {
             time("Iteración") {
                 println(s"  R$iteration: $currentRadius")
-                val count = time("  Se cuenta el número de indices") {
-                    currentIndices.count()
-                }
                 println(s"  puntos restantes: $count")
 
                 // Se guarda currentRadius porque se modifica al final del while y produce si se utiliza dentro de
@@ -72,9 +78,12 @@ class KnnConstructionAlgorithm(val desiredSize: Int,
                 val savedHasher = currentHasher
                 //val bsavedHasher = bcurrentHasher
 
+                println("--- evaluate and persist currentData ---")
+
                 val currentData = currentIndices
                     .flatMap(id => savedHasher.hash(lookupProvider.lookup(id), savedRadius).map(hash => (hash, id)))
-                    .cache()
+                    .persist(StorageLevel.DISK_ONLY)
+                /*----- .cache()*/
 
                 if (time("  Se comprueba si todos son BASE") {
                     forAll(currentData) { case (hash, _) => isBaseHashPoint(hash) }
@@ -107,7 +116,7 @@ class KnnConstructionAlgorithm(val desiredSize: Int,
                     .aggregateByKey(0)(
                         { case (numPoints, _) => numPoints + 1 },
                         (numPoints1, numPoints2) => numPoints1 + numPoints2)
-                    .cache()
+                /*----- .cache()*/
 
                 // Se muestran estadísticas: cuantos buckets tienen un cierto número de puntos
                 //showStatistics(hashWithNumPoints, bucketCondition)
@@ -116,19 +125,27 @@ class KnnConstructionAlgorithm(val desiredSize: Int,
                 }
                 showBucketCount(hashWithNumPoints, bucketCondition)
 
+                println("Se calculan los datos que se van a usar para los buckets")
+
                 // Se calculan los datos que se van a usar para los buckets
                 val dataForBuckets = currentData
                     .subtractByKey(
                         hashWithNumPoints.filter { case (_, numPoints) => !savedBucketCondition(numPoints) }
-                    ).cache()
+                    ) /*----- .cache()*/
+
+                println("dataForBuckets.isEmpty")
 
                 if (!dataForBuckets.isEmpty()) {
                     // Se muestran los envelopes
                     //println("    Envelopes");
                     //showEnvelopes(dataForBuckets, lookupProvider)
 
+                    println("Se calcula el tamaño mínimo/máximo de los envelopes")
+
                     // Se calcula el tamaño mínimo/máximo de los envelopes
-                    showMinMaxEnvelope(dataForBuckets, lookupProvider)
+                    //----- showMinMaxEnvelope(dataForBuckets, lookupProvider)
+
+                    println("Se actualiza el resultado")
 
                     // Se actualiza el resultado
                     result = result.union(dataForBuckets
@@ -139,11 +156,21 @@ class KnnConstructionAlgorithm(val desiredSize: Int,
                         .map { case (hash, ids) => (savedRadius, hash, ids) })
                     hasherMap.put(savedRadius, savedHasher)
 
+                    println("Se calculan los nuevos índices")
+
+                    println("--- evaluate and persist currentIndices ---")
+
                     // Se calculan los nuevos índices
                     val usedIndices = dataForBuckets
                         .map { case (_, id) => id }
-                    currentIndices = currentIndices.subtract(usedIndices).cache()
+                    currentIndices = currentIndices.subtract(usedIndices)
+                        .persist(StorageLevel.DISK_ONLY)
+                    /*----- .cache()*/
+
+                    count = currentIndices.count()
                 }
+
+                println("Se incrementa el radio")
 
                 // Se incrementa el radio
                 currentRadius = currentRadius * radiusMultiplier
@@ -158,7 +185,7 @@ class KnnConstructionAlgorithm(val desiredSize: Int,
 
                 iteration = iteration + 1
 
-                print("--------------------------------------------------")
+                println("--------------------------------------------------")
             }
         }
 
@@ -216,7 +243,7 @@ class KnnConstructionAlgorithm(val desiredSize: Int,
                 (envelope, id) => EnvelopeDouble.seqOp(envelope, lookupProvider.lookup(id)),
                 EnvelopeDouble.combOp)
             .map { case (_, envelope) => (envelope.sizes.min, envelope.sizes.max) } // (min, max) of the sizes of the envelope
-            .cache()
+        /*----- .cache()*/
 
         if (!maxEnvelopes.isEmpty()) {
             val min = maxEnvelopes.map(_._1).min()
@@ -232,7 +259,7 @@ object KnnConstructionAlgorithm {
      * si el directorio no existe, crea un nuevo modelo KnnQuery y lo almacena en dicho directorio;
      * en caso contrario, lo carga.
      */
-    def createOrLoad(data: RDD[(Long, Vector)],
+    /*def createOrLoad(data: RDD[(Long, Vector)],
                      desiredSize: Int,
                      baseDirectory: Path): KnnQuery = {
         val knnQuery: KnnQuery =
@@ -243,17 +270,18 @@ object KnnConstructionAlgorithm {
                 load(data.sparkContext, baseDirectory)
             }
         knnQuery
-    }
+    }*/
 
     def createAndStore(data: RDD[(Long, Vector)],
-              desiredSize: Int,
-              baseDirectory: Path): KnnQuery = {
-        val knnQuery = new KnnConstructionAlgorithm(desiredSize, baseDirectory.toString).build(data)
+                       hasherFactory: HasherFactory,
+                       desiredSize: Int,
+                       baseDirectory: Path): KnnQuery = {
+        val knnQuery = new KnnConstructionAlgorithm(hasherFactory, desiredSize, baseDirectory.toString).build(data)
 
-        // Alacena el modelo
-        DataStore.kstore(
-            baseDirectory.resolve("KnnQuery.dat"),
-            knnQuery.getSerializable())
+        println("==== Alacena el modelo =====")
+
+        // Almacena el modelo
+        DataStore.kstore(baseDirectory.resolve("KnnQuery.dat"), knnQuery.getSerializable())
 
         knnQuery
     }

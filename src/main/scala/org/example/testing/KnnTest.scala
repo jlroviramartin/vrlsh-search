@@ -5,12 +5,14 @@ import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.rdd.RDD
 import org.example.Utils.{MAX_TOLERANCE, MIN_TOLERANCE, RANDOM_SEED}
 import org.example.construction.{DefaultStatisticsCollector, KnnConstructionAlgorithm, MyKnnQuery}
-import org.example.{EnvelopeDouble, KnnDistance, KnnEuclideanDistance, KnnEuclideanSquareDistance, KnnResult}
+import org.example.evaluators.HasherFactory
+import org.example.{EnvelopeDouble, KnnEuclideanDistance, KnnEuclideanSquareDistance, KnnResult}
 
 import java.nio.file.Path
 import org.example.testing.TestingUtils._
 
 import java.nio.charset.StandardCharsets
+import scala.collection._
 
 object KnnTest {
     def testSet_v1(envelope: EnvelopeDouble,
@@ -74,6 +76,7 @@ object KnnTest {
     }
 
     def createAndStore(data: RDD[(Long, Vector)],
+                       hasherFactory: HasherFactory,
                        baseDirectory: Path,
                        k: Int,
                        t: Int = 5): Unit = {
@@ -87,7 +90,7 @@ object KnnTest {
         println()
 
         // Se construye/deserializa el objeto knnQuery
-        val knnQuery = KnnConstructionAlgorithm.createAndStore(data, desiredSize, baseDirectory)
+        val knnQuery = KnnConstructionAlgorithm.createAndStore(data, hasherFactory, desiredSize, baseDirectory)
 
         println("==== Buckets =====")
         println()
@@ -98,7 +101,7 @@ object KnnTest {
     def testSet_v2(data: RDD[(Long, Vector)],
                    baseDirectory: Path,
                    outputDirectory: Path,
-                   queries: Iterable[Vector],
+                   queries: immutable.Iterable[Vector],
                    k: Int,
                    t: Int = 5): Unit = {
 
@@ -157,7 +160,7 @@ object KnnTest {
     def testSet_v3(data: RDD[(Long, Vector)],
                    baseDirectory: Path,
                    outputDirectory: Path,
-                   queries: Iterable[(Long, Vector)],
+                   queries: immutable.Iterable[(Long, Vector)],
                    k: Int): Unit = {
 
         val sc = data.sparkContext
@@ -180,7 +183,7 @@ object KnnTest {
 
         val statistics = new DefaultStatisticsCollector()
 
-        doFastQueries(knnQuery, distanceEvaluator, k, queries.toList, statistics)
+        doFastQueries(knnQuery, distanceEvaluator, k, queries, statistics)
 
         statistics.csv(outputDirectory.resolve("statistics.csv"))
     }
@@ -188,21 +191,14 @@ object KnnTest {
 
     def storeGroundTruth(data: RDD[(Long, Vector)],
                          outputDirectory: Path,
-                         queries: Iterable[(Long, Vector)],
+                         queries: immutable.Iterable[(Long, Vector)],
                          k: Int): Unit = {
 
         val distanceEvaluator = new KnnEuclideanSquareDistance
 
-        var index = 0
-        //queries.sliding(3000, 3000).foreach(partial => {
-        println(s"==== Evaluating $index =====")
-        println()
+        println("==== Writing csv =====")
 
-        //val result = doGroundTruth_v3(data, distanceEvaluator, k, partial)
-
-        println(s"==== Writing csv $index =====")
-
-        val file = outputDirectory.resolve(s"groundtruth-$index.csv")
+        val file = outputDirectory.resolve(s"groundtruth.csv")
 
         val header = Array("id") ++ (0 until k).map(i => "k" + i)
 
@@ -214,33 +210,56 @@ object KnnTest {
 
         val csvWriter = new CsvWriter(file.toFile, StandardCharsets.UTF_8, settings)
 
-        var index2 = 0
+        var index = 0
+
         // Knn real
-        queries.foreach { case (idQuery, query) => {
-            println(s"> Procesando $index2")
+        TestingUtils.doGroundTruth(data, distanceEvaluator, k, queries.toIterator)
+            .foreach { case (queryId, array) => {
+                if (index % 100 == 0) {
+                    println(s"> Procesando $index")
+                    csvWriter.flush()
+                }
+                index = index + 1
 
-            val array = data
-                .map { case (id, point) => (distanceEvaluator.distance(query, point), id) }
-                .aggregate(new KnnResult())(KnnResult.seqOp(k), KnnResult.combOp(k))
-                .sorted
-                .map { case (distance, id) => id }
-                .toArray
+                val row = Array(Long.box(queryId)) ++ (0 until k).map(i => Long.box(array(i)))
+                csvWriter.writeRow(row: _*)
+            }
+            }
 
-            val row = Array(Long.box(idQuery)) ++ (0 until k).map(i => Long.box(array(i)))
-            csvWriter.writeRow(row: _*)
-
-            index2 = index2 + 1
-        }
-        }
-
-        //result.foreach { case (id, knnReal) => {
-        //    val row = Array(Long.box(id)) ++ (0 until k).map(i => Long.box(knnReal(i)))
-        //    csvWriter.writeRow(row: _*)
-        //}
-        //}
         csvWriter.close()
+    }
 
-        index = index + 1
-        //})
+    def storeMaxDistances(data: RDD[(Long, Vector)],
+                          outputDirectory: Path,
+                          queries: immutable.Iterable[(Long, Vector)]): Unit = {
+
+        val distanceEvaluator = new KnnEuclideanSquareDistance
+
+        println("==== Writing csv =====")
+
+        val file = outputDirectory.resolve("max-distances.csv")
+
+        val settings = new CsvWriterSettings
+        settings.setHeaders("id", "maxDistance")
+        settings.setHeaderWritingEnabled(true)
+        settings.getFormat.setDelimiter(",")
+        settings.getFormat.setLineSeparator("\n")
+
+        val csvWriter = new CsvWriter(file.toFile, StandardCharsets.UTF_8, settings)
+
+        var index = 0
+        TestingUtils.doMaxDistances(data, distanceEvaluator, queries.toIterator)
+            .foreach { case (id, maxDistance) => {
+                if (index % 100 == 0) {
+                    println(s"> Procesando $index")
+                    csvWriter.flush()
+                }
+                index = index + 1
+
+                csvWriter.writeRow(Long.box(id), Double.box(maxDistance))
+            }
+            }
+
+        csvWriter.close()
     }
 }

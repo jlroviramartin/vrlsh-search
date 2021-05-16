@@ -157,6 +157,14 @@ object Errors {
         Math.abs(distance - realDistance) / maxDistance
     }
 
+    def distanceError(distance: Double, realDistance: Double): Double = {
+        Math.abs(distance - realDistance)
+    }
+
+    def approximationRatio(distance: Double, realDistance: Double): Double = {
+        Math.abs(distance / realDistance)
+    }
+
     /**
      * Calcula el error por índice medio.
      *

@@ -7,6 +7,7 @@ import org.example.Utils
 import org.example.SparkUtils
 
 import java.nio.file.{Path, Paths}
+import scala.collection.mutable
 
 class TestOptions(var datasets: Array[String] = Array("corel", "shape", "audio"),
                   var ts: Array[Int] = Array(5, 10, 20),
@@ -15,12 +16,17 @@ class TestOptions(var datasets: Array[String] = Array("corel", "shape", "audio")
                   var useSamples: Boolean = true,
                   var samples: Int = 100) {
 
+    var dataFilePath: Map[String, Path] = datasets.map(name => (name, Paths.get(datasetPath, s"$name/${name}_i1_90.csv"))).toMap
+    var testFilePath: Map[String, Path] = datasets.map(name => (name, Paths.get(datasetPath, s"$name/${name}_i1_10.csv"))).toMap
+
     def getDataFilePath(name: String): Path = {
-        Paths.get(datasetPath, s"$name/${name}_i1_90.csv")
+        //Paths.get(datasetPath, s"$name/${name}_i1_90.csv")
+        dataFilePath(name)
     }
 
     def getTestFilePath(name: String): Path = {
-        Paths.get(datasetPath, s"$name/${name}_i1_10.csv")
+        //Paths.get(datasetPath, s"$name/${name}_i1_10.csv")
+        testFilePath(name)
     }
 
     def loadDataFile(sc: SparkContext, name: String): RDD[(Long, Vector)] = {

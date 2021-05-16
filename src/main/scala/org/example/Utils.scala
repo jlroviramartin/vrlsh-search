@@ -4,7 +4,7 @@ import java.util.concurrent.TimeUnit
 import scala.util.control.NonFatal
 import scala.util.Random
 import org.apache.hadoop.yarn.util.RackResolver
-import org.apache.log4j.{Level, Logger}
+import org.apache.log4j.{FileAppender, Level, Logger, PatternLayout}
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.example.evaluators.Hash
@@ -106,10 +106,20 @@ object Utils {
     }
 
     def quiet_logs(): Unit = {
-        Logger.getLogger(classOf[RackResolver]).getLevel
-        Logger.getLogger("org.example").setLevel(Level.ALL)
-        Logger.getLogger("org").setLevel(Level.OFF)
-        Logger.getLogger("akka").setLevel(Level.OFF)
+        //Logger.getLogger(classOf[RackResolver]).getLevel
+
+        val fa = new FileAppender()
+        fa.setName("FileLogger")
+        fa.setFile("C:/Temp/mylog.log")
+        fa.setLayout(new PatternLayout("%d %-5p [%c{1}] %m%n"))
+        fa.setThreshold(Level.DEBUG)
+        fa.setAppend(true)
+
+        //Logger.getLogger("org.example").setLevel(Level.ALL)
+        //Logger.getLogger("org").setLevel(Level.OFF)
+        //Logger.getLogger("akka").setLevel(Level.OFF)
+
+        //Logger.getRootLogger.addAppender(fa)
     }
 
     def withResources[T <: AutoCloseable, V](r: => T)(f: T => V): V = {

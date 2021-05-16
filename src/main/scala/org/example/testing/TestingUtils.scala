@@ -2,9 +2,11 @@ package org.example.testing
 
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.rdd.RDD
-import org.example.{EnvelopeDouble, Errors, KnnDistance, KnnResult, MultiKnnResult}
-import org.example.Utils.{RANDOM, time}
+import org.example.{BroadcastLookupProvider, EnvelopeDouble, Errors, KnnDistance, KnnResult}
+import org.example.Utils.RANDOM
 import org.example.construction.{KnnQuery, StatisticsCollector}
+
+import scala.collection._
 
 object TestingUtils {
 
@@ -18,7 +20,7 @@ object TestingUtils {
         Vectors.dense(envelope.min.zip(envelope.max).map { case (min, max) => min + RANDOM.nextDouble() * (max - min) })
     }
 
-    def randomInside(envelope: EnvelopeDouble, count: Int): Iterable[Vector] = {
+    def randomInside(envelope: EnvelopeDouble, count: Int): immutable.Iterable[Vector] = {
         (0 until count).map(_ => randomInside(envelope))
     }
 
@@ -41,7 +43,7 @@ object TestingUtils {
         })
     }
 
-    def randomOutside(envelope: EnvelopeDouble, factor: Double, count: Int): Iterable[Vector] = {
+    def randomOutside(envelope: EnvelopeDouble, factor: Double, count: Int): TraversableOnce[Vector] = {
         (0 until count).map(_ => randomOutside(envelope, factor))
     }
 
@@ -49,7 +51,7 @@ object TestingUtils {
                   data: RDD[(Long, Vector)],
                   distanceEvaluator: KnnDistance,
                   k: Int,
-                  queries: Iterable[Vector],
+                  queries: immutable.Iterable[Vector],
                   statistics: StatisticsCollector,
                   errorCollector: ErrorCollector): Unit = {
 
@@ -106,8 +108,8 @@ object TestingUtils {
     def doFastQueries(knnQuery: KnnQuery,
                       distanceEvaluator: KnnDistance,
                       k: Int,
-                      queries: Iterable[(Long, Vector)],
-                      statistics: StatisticsCollector): Iterable[(Long, Array[(Double, Long)])] = {
+                      queries: immutable.Iterable[(Long, Vector)],
+                      statistics: StatisticsCollector): TraversableOnce[(Long, Array[(Double, Long)])] = {
         queries
             .zipWithIndex
             .map { case ((id, query), index) => {
@@ -127,184 +129,138 @@ object TestingUtils {
     def doGroundTruth(data: RDD[(Long, Vector)],
                       distanceEvaluator: KnnDistance,
                       k: Int,
-                      queries: Iterable[(Long, Vector)]): Iterable[(Long, (Array[(Long, Double)], (Long, Double)))] = {
-
-        val sc = data.sparkContext
-        val brQueries = sc.broadcast(queries)
-
-        val size = queries.size
-
+                      queries: Iterator[(Long, Vector)]): Iterator[(Long, Array[Long])] = {
         // Knn real
-        val multiKnnReal = data
-            .map { case (id, point) => (brQueries.value.map { case (idQuery, query) => distanceEvaluator.distance(query, point) }, id) }
-            .aggregate(new MultiKnnResult(size))(MultiKnnResult.seqOp(k), MultiKnnResult.combOp(k))
-            .array
-            .map(knnResult =>
-                knnResult
-                    .sorted
-                    .map { case (distance, id) => (id, distance) }
-                    .toArray
-            )
-
-        val maxDistances = data
-            .map { case (id, point) => (brQueries.value.map { case (idQuery, query) => (id, distanceEvaluator.distance(query, point)) }) }
-            .reduce { case (idsDistances1, idsDistances2) =>
-                idsDistances1.zip(idsDistances2).map { case ((id1, distance1), (id2, distance2)) => {
-                    if (distance1 >= distance2) (id1, distance1)
-                    else (id2, distance2)
-                }
-                }
-            }
-
-        queries.zip(multiKnnReal).zip(maxDistances).map { case (((id, query), knnReal), maxDistance) => (id, (knnReal, maxDistance)) }
-    }
-
-    def doGroundTruth_v2(data: RDD[(Long, Vector)],
-                         distanceEvaluator: KnnDistance,
-                         k: Int,
-                         queries: Iterable[(Long, Vector)]): Iterable[(Long, Array[Long])] = {
-
-        val sc = data.sparkContext
-        val brQueries = sc.broadcast(queries)
-
-        val size = queries.size
-
-        // Knn real
-        val multiKnnReal = data
-            .map { case (id, point) => (brQueries.value.map { case (idQuery, query) => distanceEvaluator.distance(query, point) }, id) }
-            .aggregate(new MultiKnnResult(size))(MultiKnnResult.seqOp(k), MultiKnnResult.combOp(k))
-            .array
-            .map(knnResult =>
-                knnResult
-                    .sorted
-                    .map { case (distance, id) => id }
-                    .toArray
-            )
-
-        queries.zip(multiKnnReal).map { case ((id, query), knnReal) => (id, knnReal) }
-    }
-
-    def doGroundTruth_v3(data: RDD[(Long, Vector)],
-                         distanceEvaluator: KnnDistance,
-                         k: Int,
-                         queries: Iterable[(Long, Vector)]): Iterable[(Long, Array[Long])] = {
-
-        var index = 0
-        // Knn real
-        queries.map { case (idQuery, query) => {
-            println(s"> Procesando $index")
-
-            val knnReal = data
-                .map { case (id, point) => (distanceEvaluator.distance(query, point), id) }
-                .aggregate(new KnnResult())(KnnResult.seqOp(k), KnnResult.combOp(k))
-            index = index + 1
-            (idQuery, knnReal.sorted.map { case (distance, id) => id }.toArray)
-        }
-        }
-    }
-
-    /*def doRealQueries(data: RDD[(Long, Vector)],
-                      distanceEvaluator: KnnDistance,
-                      k: Int,
-                      queries: Array[(Long, Vector)]): Iterable[(Long, (Array[(Long, Double)], (Long, Double)))] = {
         queries
-            .zipWithIndex
-            .map { case ((id, query), index) => {
-                print(s"$index")
-                if (index % 10 == 9) {
-                    println()
-                } else {
-                    print(", ")
-                }
-                //(id, doRealQuery(data, distanceEvaluator, k, query))
-
-                // -----------------------------------------------------------------------------------------------------
-
-                // Knn real
+            .map { case (queryId, query) => {
                 val knnReal = data
                     .map { case (id, point) => (distanceEvaluator.distance(query, point), id) }
                     .aggregate(new KnnResult())(KnnResult.seqOp(k), KnnResult.combOp(k))
                     .sorted
-                    .map { case (distance, id) => (id, distance) }
+                    .map { case (_, id) => id }
                     .toArray
 
-                val maxDistance = data
-                    .map { case (id, point) => (id, distanceEvaluator.distance(query, point)) }
-                    .reduce { case ((id1, distance1), (id2, distance2)) =>
-                        if (distance1 >= distance2) (id1, distance1)
-                        else (id2, distance2)
+                (queryId, knnReal)
+            }
+            }
+    }
+
+    def doMaxDistances(data: RDD[(Long, Vector)],
+                       distanceEvaluator: KnnDistance,
+                       queries: Iterator[(Long, Vector)]): Iterator[(Long, Double)] = {
+        // Máximos
+        queries
+            .map { case (queryId, queryPoint) => {
+                // Máximo de las distancias
+                val max = data
+                    .map { case (_, point) => distanceEvaluator.distance(queryPoint, point) }
+                    .max()
+
+                (queryId, max)
+            }
+            }
+    }
+
+    def checkError(data: RDD[(Long, Vector)],
+                   queries: RDD[(Long, Vector)],
+                   groundTruth: RDD[(Long, Array[Long])],
+                   approximateResult: RDD[(Long, Array[Long])],
+                   maxDistances: RDD[(Long, Double)],
+                   distanceEvaluator: KnnDistance,
+                   k: Int): Unit = {
+        assert(!approximateResult.isEmpty)
+
+        val count = data.count()
+        val maxIndex = count - 1.toLong
+
+        val lookupProvider = new BroadcastLookupProvider(data)
+
+        queries
+            .join(approximateResult.join(groundTruth.join(maxDistances)))
+            .map { case (queryId, (queryPoint, (approx, (ground, maxDistance)))) => {
+
+                // Se obtienen los k primeros elementos teniendo en cuenta que dos o mas puntos pueden estar a igual
+                // distancia del punto consulta (puede haber mas de k)
+                val realResult = ground
+                    .map(groundId => (groundId, distanceEvaluator.distance(queryPoint, lookupProvider.lookup(groundId))))
+                    .groupBy { case (_, distance) => distance }
+                    .map { case (distance, arrayOfIdAndDistance) => (distance, arrayOfIdAndDistance.map { case (id, _) => id }) }
+                    .toArray
+                    .sortBy { case (distance, _) => distance }
+                    .take(k)
+                    .flatMap { case (_, arrayOfId) => arrayOfId }
+
+                // Mapa del id del punto real a su índice y distancia
+                val realMap = ground
+                    .zipWithIndex
+                    .map { case (id, index) => (id, (index, distanceEvaluator.distance(queryPoint, lookupProvider.lookup(id)))) }
+                    .toMap
+
+                //if (approx.count() < k)
+                if (!approx.forall(id => realMap.contains(id))) {
+                    println(s"El punto $queryId NO encontró solución estable")
+                }
+
+                val errors = approx.zipWithIndex.map { case (id, index) => {
+                    val distance = distanceEvaluator.distance(queryPoint, lookupProvider.lookup(id))
+
+                    if (realMap.contains(id)) {
+                        val (realIndex, realDistance) = realMap(id)
+
+                        val indexError = Errors.localIndexError(index, realIndex, maxIndex)
+                        val distanceErrorNorm = Errors.localDistanceError(distance, realDistance, count)
+                        val distanceError = Errors.distanceError(distance, realDistance)
+
+                        (indexError, distanceErrorNorm, distanceError)
+                    } else {
+                        // Se asume error máximo
+                        val indexError = Errors.localIndexError(index, maxIndex, maxIndex)
+                        val distanceErrorNorm = Errors.localDistanceError(distance, maxDistance, count)
+                        val distanceError = Errors.distanceError(distance, maxDistance)
+                        val approxRatio = Errors.approximationRatio(distance, maxDistance)
+
+                        (indexError, distanceErrorNorm, distanceError, approxRatio)
+                    }
+                }
+                }
+
+                // Se calcula la suma de todos los errores...
+                val (sumIndexError: Double, sumDistanceErrorNorm: Double, sumDistanceError: Double, sumApproxRatio: Double, size: Int) = errors
+                    .foldLeft((0.0, 0.0, 0.0, 0.0, 0)) {
+                        case (
+                            (accIndexError, accDistanceErrorNorm, accDistanceError, accApproxRatio, accCount),
+                            (indexError: Double, distanceErrorNorm: Double, distanceError: Double, approxRatio: Double)) =>
+
+                            // Se calcula el acumulado
+                            (accIndexError + indexError,
+                                accDistanceErrorNorm + distanceErrorNorm,
+                                accDistanceError + distanceError,
+                                accApproxRatio + approxRatio,
+                                accCount + 1)
                     }
 
-                (id, (knnReal, maxDistance))
+                // .. y su media
+                val (avgIndexError, avgDistanceErrorNorm, avgDistanceError, avgApproxRatio) = (sumIndexError / size, sumDistanceErrorNorm / size, sumDistanceError / size, sumApproxRatio / size)
 
-                // -----------------------------------------------------------------------------------------------------
+                // Se calcula la precisión
+                val set = realResult.toSet
+                var sum = 0.0
+                var c = 0.0
+                (1 to k).foreach(i => {
+                    if (set.contains(approx(i - 1))) {
+                        c += 1
+                    }
+                    sum += c / i.toDouble
+                })
+                val avgPrecision = sum / k.toDouble
+
+                // Se calcula el recall
+                val calculated = approx.toSet
+                val intersection = realResult.toSet & calculated
+                val recall = intersection.size.toDouble / k.toDouble
+
+                (avgIndexError, avgDistanceErrorNorm, avgDistanceError, avgPrecision, recall)
             }
             }
-    }*/
-
-    /*def doRealQuery(data: RDD[(Long, Vector)],
-                    distanceEvaluator: KnnDistance,
-                    k: Int,
-                    query: Vector): (Array[(Long, Double)], (Long, Double)) = {
-        // Knn real
-        val knnReal = data
-            .map { case (id, point) => (distanceEvaluator.distance(query, point), id) }
-            .aggregate(new KnnResult())(KnnResult.seqOp(k), KnnResult.combOp(k))
-            .sorted
-            .map { case (distance, id) => (id, distance) }
-            .toArray
-
-        val maxDistance = data
-            .map { case (id, point) => (id, distanceEvaluator.distance(query, point)) }
-            .reduce { case ((id1, distance1), (id2, distance2)) =>
-                if (distance1 >= distance2) (id1, distance1)
-                else (id2, distance2)
-            }
-
-        (knnReal, maxDistance)
-    }*/
-
-    /*def doQuery_v2(data: RDD[(Long, Vector)],
-                   knnQuery: KnnQuery,
-                   query: Vector,
-                   envelope: EnvelopeDouble, k: Int): (Double, Double, Int) = {
-        //val count = data.count()
-
-        // Knn calculado
-        // List: (distance: Double, id: Long)
-        val result = knnQuery.query(query, k)
-
-        val distance = new KnnEuclideanDistance
-
-        // Knn real
-        val knnReal = data
-            .map { case (id, point) => (distance.distance(query, point), id) }
-            .aggregate(new KnnResult())(KnnResult.seqOp(k), KnnResult.combOp(k))
-            .sorted
-            .toList
-
-        // Mapa que indica las posiciones reales de cada punto
-        // Mapa: (id: Long) -> (0index: Long, distance: Double)
-        / *val realMap = {
-            val sc = data.sparkContext
-            val setOfIds = sc.broadcast(result.map { case (_, id) => id }.toSet)
-
-            data
-                .map { case (id, point) => (distance.distance(query, point), id) }
-                .sortByKey()
-                .zipWithIndex
-                .filter { case ((_, id), _) => setOfIds.value.contains(id) }
-                .take(k)
-                .map { case ((d, id), index) => (id, (index, d)) }
-                .toMap
-        }* /
-
-        val maxDistance = envelope.maxDistance
-
-        //val indexError = globalIndexError(result, realMap, k, count)
-        val indexError = 0
-        val distanceError = globalDistanceError(result, knnReal, k, maxDistance)
-
-        (indexError, distanceError, result.size)
-    }*/
+    }
 }

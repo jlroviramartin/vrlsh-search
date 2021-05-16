@@ -18,7 +18,6 @@ object StatisticsCollector {
 
         def data(): Seq[Any]
     }
-
 }
 
 class DefaultStatisticsCollector(var statistics: List[StatisticsCollector.Row] = List()) extends StatisticsCollector {

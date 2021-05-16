@@ -105,15 +105,18 @@ object SparkUtils {
         Utils.quiet_logs()
 
         val spark = SparkSession.builder
+            .master("local[*]")
             .appName("Simple Application")
-            .config("spark.driver.cores", "20")
-            .config("spark.driver.memory", "16g")
-            .config("spark.executor.cores", "20")
-            .config("spark.executor.memory", "16g")
-            .config("spark.master", "local")
-            .config("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
-            .config("spark.kryoserializer.buffer", "512m") // 64m
-            .config("spark.kryoserializer.buffer.max", "2047m") // 1024m,128m
+            .config("spark.driver.memory", "2g")
+            .config("spark.executor.memory", "2g")
+            //.config("spark.driver.cores", "20")
+            //.config("spark.driver.memory", "16g")
+            //.config("spark.executor.cores", "20")
+            //.config("spark.executor.memory", "16g")
+            //.config("spark.master", "local")
+            //.config("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+            //.config("spark.kryoserializer.buffer", "1024m") // 64m
+            //.config("spark.kryoserializer.buffer.max", "2047m") // 1024m,128m
             .getOrCreate()
 
         spark

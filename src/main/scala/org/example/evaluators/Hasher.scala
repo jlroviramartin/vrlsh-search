@@ -3,7 +3,10 @@ package org.example.evaluators
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.rdd.RDD
 import org.apache.spark.internal.Logging
-import org.example.{HashOptions, Utils}
+import org.example.Utils.time
+import org.example.{DataStore, HashOptions, Utils}
+
+import java.nio.file.{Files, Path, Paths}
 
 @SerialVersionUID(-4061941561292649692l)
 trait Hasher extends Serializable {
@@ -96,7 +99,56 @@ trait Hasher extends Serializable {
     }
 }
 
-object Hasher extends Logging {
+trait HasherFactory {
+    def getHasherForDataset(data: RDD[(Long, Vector)],
+                            dimension: Int,
+                            desiredSize: Int): (Hasher, HashOptions, Double)
+}
+
+class LoadHasherFactory(val outputPath: Path) extends HasherFactory {
+
+    override def getHasherForDataset(data: RDD[(Long, Vector)],
+                                     dimension: Int,
+                                     desiredSize: Int): (Hasher, HashOptions, Double) = {
+        // Almacena los datos
+        DataStore.kload_v2[(Hasher, HashOptions, Double)](outputPath.resolve("hasher.dat"))
+    }
+}
+
+object LoadHasherFactory {
+    def store(outputPath: Path,
+              data: RDD[(Long, Vector)],
+              desiredSize: Int): Unit = {
+        //val baseDirectory = outputPath.resolve(s"$desiredSize")
+        //Files.createDirectories(baseDirectory)
+
+        val dimension = data.first()._2.size
+
+        val min = desiredSize * Utils.MIN_TOLERANCE
+        val max = desiredSize * Utils.MAX_TOLERANCE
+
+        val (hasher, hashOptions, radius) = time(s"desiredSize = $desiredSize tolerance = ($min, $max)") {
+            Hasher.getHasherForDataset(data, dimension, desiredSize)
+        }
+
+        // Almacena los datos
+        DataStore.kstore(outputPath.resolve("hasher.dat"), (hasher, hashOptions, radius))
+
+    }
+}
+
+class OnlineHasherFactory(val outputPath: String,
+                          val name: String) extends HasherFactory {
+
+    override def getHasherForDataset(data: RDD[(Long, Vector)],
+                                     dimension: Int,
+                                     desiredSize: Int): (Hasher, HashOptions, Double) = {
+        Hasher.getHasherForDataset(data, dimension, desiredSize)
+    }
+}
+
+
+object Hasher extends Logging with HasherFactory {
     val MIN_TOLERANCE: Double = Utils.MIN_TOLERANCE
     val MAX_TOLERANCE: Double = Utils.MAX_TOLERANCE
 
