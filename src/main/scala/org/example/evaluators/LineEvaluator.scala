@@ -18,9 +18,6 @@ class LineEvaluator(val w: Array[Double], val b: Double)
     }
 
     def this(random: Random, dim: Int) = {
-        //this(
-        //    (0 until dim).map(_ => random.nextDouble).toArray,
-        //    random.nextDouble)
         this(
             (0 until dim).map(_ => random.nextGaussian).toArray,
             random.nextGaussian)

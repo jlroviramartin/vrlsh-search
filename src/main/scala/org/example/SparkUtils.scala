@@ -107,16 +107,16 @@ object SparkUtils {
         val spark = SparkSession.builder
             .master("local[*]")
             .appName("Simple Application")
-            .config("spark.driver.memory", "2g")
-            .config("spark.executor.memory", "2g")
+            .config("spark.driver.maxResultSize", "0")
+            .config("spark.driver.memory", "16g")
+            .config("spark.executor.memory", "16g")
             //.config("spark.driver.cores", "20")
             //.config("spark.driver.memory", "16g")
             //.config("spark.executor.cores", "20")
             //.config("spark.executor.memory", "16g")
             //.config("spark.master", "local")
             //.config("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
-            //.config("spark.kryoserializer.buffer", "1024m") // 64m
-            //.config("spark.kryoserializer.buffer.max", "2047m") // 1024m,128m
+            //.config("spark.kryoserializer.buffer.max", "2000m") // 1024m,128m
             .getOrCreate()
 
         spark
@@ -142,6 +142,60 @@ object SparkUtils {
                 .map(_.swap)
                 .map { case (id, labelPoint) => (id, Vectors.dense(labelPoint.features.toArray)) }
         }
+        data
+    }
+
+    def readGroundTruthFileByFilename(sc: SparkContext, file: String): RDD[(Long, Array[Long])] = {
+        readGroundTruthFile(sc, Paths.get(file))
+    }
+
+    def readGroundTruthFile(sc: SparkContext, file: Path): RDD[(Long, Array[Long])] = {
+        val data: RDD[(Long, Array[Long])] = sc.textFile(file.toString)
+            .zipWithIndex()
+            .filter { case (line, index) => index > 0 }
+            .map { case (line, index) => line }
+            .map(line => {
+                val args = line.split(',')
+                val id = args(0).toLong
+                val values = (1 until args.length).map(i => args(i).toLong).toArray
+                (id, values)
+            })
+        data
+    }
+
+    def readApproxFileByFilename(sc: SparkContext, file: String): RDD[(Long, Array[Long])] = {
+        readApproxFile(sc, Paths.get(file))
+    }
+
+    def readApproxFile(sc: SparkContext, file: Path): RDD[(Long, Array[Long])] = {
+        val data: RDD[(Long, Array[Long])] = sc.textFile(file.toString)
+            .zipWithIndex()
+            .filter { case (line, index) => index > 0 }
+            .map { case (line, index) => line }
+            .map(line => {
+                val args = line.split(',')
+                val id = args(0).toLong
+                val values = (1 until args.length).map(i => args(i).toLong).filter(id => id >= 0).toArray
+                (id, values)
+            })
+        data
+    }
+
+    def readMaxDistancesFileByFilename(sc: SparkContext, file: String): RDD[(Long, Double)] = {
+        readMaxDistancesFile(sc, Paths.get(file))
+    }
+
+    def readMaxDistancesFile(sc: SparkContext, file: Path): RDD[(Long, Double)] = {
+        val data: RDD[(Long, Double)] = sc.textFile(file.toString)
+            .zipWithIndex()
+            .filter { case (line, index) => index > 0 }
+            .map { case (line, index) => line }
+            .map(line => {
+                val args = line.split(',')
+                val id = args(0).toLong
+                val maxDistance = args(1).toDouble
+                (id, maxDistance)
+            })
         data
     }
 }

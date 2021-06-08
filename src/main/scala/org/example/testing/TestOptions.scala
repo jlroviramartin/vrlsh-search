@@ -13,46 +13,61 @@ class TestOptions(var datasets: Array[String] = Array("corel", "shape", "audio")
                   var ts: Array[Int] = Array(5, 10, 20),
                   var ks: Array[Int] = Array(4, 16, 20, 64, 256),
                   var datasetPath: String = "C:/Users/joseluis/OneDrive/TFM/dataset",
-                  var useSamples: Boolean = true,
-                  var samples: Int = 100) {
+                  var trainRatio: Double = -1,
+                  var samples: Int = -1) {
 
     var dataFilePath: Map[String, Path] = datasets.map(name => (name, Paths.get(datasetPath, s"$name/${name}_i1_90.csv"))).toMap
     var testFilePath: Map[String, Path] = datasets.map(name => (name, Paths.get(datasetPath, s"$name/${name}_i1_10.csv"))).toMap
 
     def getDataFilePath(name: String): Path = {
-        //Paths.get(datasetPath, s"$name/${name}_i1_90.csv")
         dataFilePath(name)
     }
 
-    def getTestFilePath(name: String): Path = {
-        //Paths.get(datasetPath, s"$name/${name}_i1_10.csv")
+    private def getTestFilePath(name: String): Path = {
         testFilePath(name)
     }
 
     def loadDataFile(sc: SparkContext, name: String): RDD[(Long, Vector)] = {
-        //val data = "hdfs://namenode:9000/dataset/$name/${name}_i1_90.csv"
-        SparkUtils.readDataFileByFilename(sc, getDataFilePath(name).toString)
+        val rdd = SparkUtils.readDataFileByFilename(sc, getDataFilePath(name).toString)
+
+        if (trainRatio > 0) {
+            rdd.randomSplit(Array(trainRatio, 1 - trainRatio), seed = Utils.RANDOM_SEED)(0)
+        } else {
+            rdd
+        }
     }
 
     def loadTestFile(sc: SparkContext, name: String): Array[Vector] = {
-        if (useSamples) {
-            SparkUtils.readDataFileByFilename(sc, getTestFilePath(name).toString)
+        if (trainRatio > 0) {
+            SparkUtils.readDataFileByFilename(sc, getDataFilePath(name).toString)
                 .map { case (id, point) => point }
-                .takeSample(withReplacement = false, samples, Utils.RANDOM_SEED)
-        } else {
-            SparkUtils.readDataFileByFilename(sc, getTestFilePath(name).toString)
-                .map { case (id, point) => point }
+                .randomSplit(Array(trainRatio, 1 - trainRatio), seed = Utils.RANDOM_SEED)(1)
                 .collect()
+        } else {
+            val rdd = SparkUtils.readDataFileByFilename(sc, getTestFilePath(name).toString)
+                .map { case (id, point) => point }
+
+            if (samples > 0) {
+                rdd.takeSample(withReplacement = false, samples, Utils.RANDOM_SEED)
+            } else {
+                rdd.collect()
+            }
         }
     }
 
     def loadTestFileWithId(sc: SparkContext, name: String): Array[(Long, Vector)] = {
-        if (useSamples) {
-            SparkUtils.readDataFileByFilename(sc, getTestFilePath(name).toString)
-                .takeSample(withReplacement = false, samples, Utils.RANDOM_SEED)
-        } else {
-            SparkUtils.readDataFileByFilename(sc, getTestFilePath(name).toString)
+        if (trainRatio > 0) {
+            SparkUtils.readDataFileByFilename(sc, getDataFilePath(name).toString)
+                .randomSplit(Array(trainRatio, 1 - trainRatio), seed = Utils.RANDOM_SEED)(1)
                 .collect()
+        } else {
+            val rdd = SparkUtils.readDataFileByFilename(sc, getTestFilePath(name).toString)
+
+            if (samples > 0) {
+                rdd.takeSample(withReplacement = false, samples, Utils.RANDOM_SEED)
+            } else {
+                rdd.collect()
+            }
         }
     }
 }

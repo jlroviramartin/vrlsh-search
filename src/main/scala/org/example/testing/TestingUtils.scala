@@ -4,7 +4,8 @@ import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.rdd.RDD
 import org.example.{BroadcastLookupProvider, EnvelopeDouble, Errors, KnnDistance, KnnResult}
 import org.example.Utils.RANDOM
-import org.example.construction.{KnnQuery, StatisticsCollector}
+import org.example.construction.KnnQuery
+import org.example.statistics.{QualityStatistics, StatisticsCollector}
 
 import scala.collection._
 
@@ -73,6 +74,30 @@ object TestingUtils {
             }
     }
 
+    def doQueriesWithResult(knnQuery: KnnQuery,
+                            distanceEvaluator: KnnDistance,
+                            k: Int,
+                            queries: immutable.Iterable[(Long, Vector)],
+                            statistics: StatisticsCollector): immutable.Iterable[(Long, Array[Long])] = {
+
+        val count = queries.size
+
+        println(s"Queries: $count")
+        println()
+
+        queries
+            .zipWithIndex
+            .map { case ((id, query), index) => {
+                if (index % 100 == 0) {
+                    println(s"    == $index")
+                    println()
+                }
+
+                (id, knnQuery.query(query, k, distanceEvaluator, statistics).map { case (vector, id) => id }.toArray)
+            }
+            }
+    }
+
     /**
      * Realiza la consulta de un punto.
      *
@@ -105,7 +130,7 @@ object TestingUtils {
             errorCollector)
     }
 
-    def doFastQueries(knnQuery: KnnQuery,
+    /*def doFastQueries(knnQuery: KnnQuery,
                       distanceEvaluator: KnnDistance,
                       k: Int,
                       queries: immutable.Iterable[(Long, Vector)],
@@ -124,7 +149,7 @@ object TestingUtils {
                 (id, approximateResult.toArray)
             }
             }
-    }
+    }*/
 
     def doGroundTruth(data: RDD[(Long, Vector)],
                       distanceEvaluator: KnnDistance,
@@ -167,7 +192,7 @@ object TestingUtils {
                    approximateResult: RDD[(Long, Array[Long])],
                    maxDistances: RDD[(Long, Double)],
                    distanceEvaluator: KnnDistance,
-                   k: Int): Unit = {
+                   k: Int): RDD[QualityStatistics] = {
         assert(!approximateResult.isEmpty)
 
         val count = data.count()
@@ -210,8 +235,9 @@ object TestingUtils {
                         val indexError = Errors.localIndexError(index, realIndex, maxIndex)
                         val distanceErrorNorm = Errors.localDistanceError(distance, realDistance, count)
                         val distanceError = Errors.distanceError(distance, realDistance)
+                        val approxRatio = Errors.approximationRatio(distance, realDistance)
 
-                        (indexError, distanceErrorNorm, distanceError)
+                        (indexError, distanceErrorNorm, distanceError, approxRatio)
                     } else {
                         // Se asume error máximo
                         val indexError = Errors.localIndexError(index, maxIndex, maxIndex)
@@ -243,11 +269,13 @@ object TestingUtils {
                 val (avgIndexError, avgDistanceErrorNorm, avgDistanceError, avgApproxRatio) = (sumIndexError / size, sumDistanceErrorNorm / size, sumDistanceError / size, sumApproxRatio / size)
 
                 // Se calcula la precisión
-                val set = realResult.toSet
+                val set = realResult
                 var sum = 0.0
                 var c = 0.0
                 (1 to k).foreach(i => {
-                    if (set.contains(approx(i - 1))) {
+                    val index = i - 1
+
+                    if (index < approx.length && set.contains(approx(index))) {
                         c += 1
                     }
                     sum += c / i.toDouble
@@ -255,11 +283,31 @@ object TestingUtils {
                 val avgPrecision = sum / k.toDouble
 
                 // Se calcula el recall
-                val calculated = approx.toSet
-                val intersection = realResult.toSet & calculated
+                //val calculated = approx.toSet
+                val intersection = realResult.toSet & approx.toSet
                 val recall = intersection.size.toDouble / k.toDouble
 
-                (avgIndexError, avgDistanceErrorNorm, avgDistanceError, avgPrecision, recall)
+                val apk = (1 / k.toDouble) * (1 to k).map((i: Int) => {
+                    if (i < approx.length && realResult.contains(approx(i))) {
+                        val intersection_i = realResult.toSet & approx.take(i).toSet
+                        val recall_i = intersection_i.size.toDouble / i.toDouble
+                        recall_i
+                    } else {
+                        0
+                    }
+                }).sum
+
+                //(avgIndexError, avgDistanceErrorNorm, avgDistanceError, avgPrecision, recall)
+
+                val statistics = new QualityStatistics
+                statistics.avgIndexError = avgIndexError
+                statistics.avgDistanceErrorNorm = avgDistanceErrorNorm
+                statistics.avgDistanceError = avgDistanceError
+                statistics.avgPrecision = avgPrecision
+                statistics.recall = recall
+                statistics.apk = apk
+                //statistics.avgApproxRatio = avgApproxRatio
+                statistics
             }
             }
     }

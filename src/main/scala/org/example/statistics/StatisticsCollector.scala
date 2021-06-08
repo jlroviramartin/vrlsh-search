@@ -1,4 +1,4 @@
-package org.example.construction
+package org.example.statistics
 
 import com.univocity.parsers.csv.{CsvWriter, CsvWriterSettings}
 

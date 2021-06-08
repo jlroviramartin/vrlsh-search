@@ -4,8 +4,8 @@ import org.apache.spark.ml.feature.BucketedRandomProjectionLSH
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
-import org.example.construction.DefaultStatisticsCollector
 import org.example.lsh.LshKnnConstructionAlgorithm
+import org.example.statistics.DefaultStatisticsCollector
 import org.example.testing.{DefaultErrorCollector, TestOptions}
 
 import java.nio.file.{Files, Paths}

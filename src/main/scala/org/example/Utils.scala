@@ -108,18 +108,17 @@ object Utils {
     def quiet_logs(): Unit = {
         //Logger.getLogger(classOf[RackResolver]).getLevel
 
-        val fa = new FileAppender()
-        fa.setName("FileLogger")
-        fa.setFile("C:/Temp/mylog.log")
-        fa.setLayout(new PatternLayout("%d %-5p [%c{1}] %m%n"))
-        fa.setThreshold(Level.DEBUG)
-        fa.setAppend(true)
-
-        //Logger.getLogger("org.example").setLevel(Level.ALL)
-        //Logger.getLogger("org").setLevel(Level.OFF)
-        //Logger.getLogger("akka").setLevel(Level.OFF)
-
+        //val fa = new FileAppender()
+        //fa.setName("FileLogger")
+        //fa.setFile("C:/Temp/mylog.log")
+        //fa.setLayout(new PatternLayout("%d %-5p [%c{1}] %m%n"))
+        //fa.setThreshold(Level.DEBUG)
+        //fa.setAppend(true)
         //Logger.getRootLogger.addAppender(fa)
+
+        Logger.getLogger("org.example").setLevel(Level.ALL)
+        Logger.getLogger("org").setLevel(Level.OFF)
+        Logger.getLogger("akka").setLevel(Level.OFF)
     }
 
     def withResources[T <: AutoCloseable, V](r: => T)(f: T => V): V = {

@@ -3,6 +3,7 @@ package org.example.construction
 import org.apache.spark.SparkContext
 import org.apache.spark.ml.linalg.Vector
 import org.example.KnnDistance
+import org.example.statistics.StatisticsCollector
 
 import scala.collection.immutable.Iterable
 
@@ -17,7 +18,7 @@ trait KnnQuery {
      */
     def getSerializable(): KnnQuerySerializable
 
-    def printResume()
+    //def printResume()
 }
 
 trait KnnQuerySerializable extends Serializable {

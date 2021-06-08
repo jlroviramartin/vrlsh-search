@@ -127,9 +127,7 @@ object LoadHasherFactory {
         val min = desiredSize * Utils.MIN_TOLERANCE
         val max = desiredSize * Utils.MAX_TOLERANCE
 
-        val (hasher, hashOptions, radius) = time(s"desiredSize = $desiredSize tolerance = ($min, $max)") {
-            Hasher.getHasherForDataset(data, dimension, desiredSize)
-        }
+        val (hasher, hashOptions, radius) = Hasher.getHasherForDataset(data, dimension, desiredSize)
 
         // Almacena los datos
         DataStore.kstore(outputPath.resolve("hasher.dat"), (hasher, hashOptions, radius))

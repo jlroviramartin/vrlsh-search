@@ -4,8 +4,9 @@ import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.rdd.RDD
 import org.example.{BroadcastLookupProvider, HashOptions, KnnDistance, KnnResult}
 import org.example.Utils.{RANDOM_SEED, time}
-import org.example.construction.{KnnConstruction, KnnQuery, KnnQuerySerializable, MyStatisticRow, StatisticsCollector}
+import org.example.construction.{KnnConstruction, KnnQuery, KnnQuerySerializable}
 import org.example.evaluators.{Hash, Hasher}
+import org.example.statistics.{EvaluationStatistics, StatisticsCollector}
 
 import scala.collection.immutable.Iterable
 import scala.util.Random
@@ -128,7 +129,7 @@ class MyKnnQuery(val hasher: Hasher,
 
         time("statistics") {
             statistics.collect(
-                new MyStatisticRow(knnResult.size,
+                new EvaluationStatistics(knnResult.size,
                     knnResult.comparisons,
                     knnResult.buckets,
                     numLevels,

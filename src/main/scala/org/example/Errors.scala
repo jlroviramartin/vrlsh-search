@@ -41,7 +41,8 @@ object Errors {
         if (approximateResult.isEmpty) {
             val errors = Array[(Long, Double, Double, Double, Long, Long)]()
             val recall = 0
-            errorCollector.collect(errors, recall)
+            val apk = 0
+            errorCollector.collect(errors, recall, apk)
             return
         }
 
@@ -103,7 +104,7 @@ object Errors {
             }
             }*/
 
-        println("Approximate knn")
+        /*println("Approximate knn")
         val count = data.count()
         errors
             .foreach { case (id, distance, realDistance, maxDistance, index, realIndex) => {
@@ -111,11 +112,11 @@ object Errors {
                 val error = Errors.localDistanceError(distance, realDistance, maxDistance)
                 println(f"$distance%1.5f [$realDistance%1.5f] - $realIndex - $id - $indexError%1.5f - $error%1.5f")
             }
-            }
+            }*/
         // DEBUG -------------------------------------------------------------------------------------------------------
 
         // Solución real: puede tener mas de k elementos, porque tengan igual distancia
-        val solution = scala.collection.mutable.Set[Long]()
+        /*val solution = scala.collection.mutable.Set[Long]()
         groupedByDistanceAndSortedAndIndexed
             .take(k)
             .foreach { case ((distance, ids), index) => {
@@ -123,15 +124,26 @@ object Errors {
                     ids.foreach(solution.add(_))
                 }
             }
-            }
+            }*/
+        val solution = groupedByDistanceAndSortedAndIndexed
+            .flatMap { case ((distance, ids), index) => ids }.take(k)
+        val calculated = approximateResult.map { case (_, id) => id }.toArray
 
-        val calculated = approximateResult.map { case (distance, id) => id }.toSet
-        val intersection = solution & calculated
+        val intersection = solution.toSet & calculated.toSet
         val recall = intersection.size.toDouble / k.toDouble
 
-        errorCollector.collect(errors, recall)
-    }
+        val apk = (1 / k.toDouble) * (1 to k).map((i: Int) => {
+            if (i < calculated.length && solution.contains(calculated(i))) {
+                val intersection_i = solution.toSet & calculated.take(i).toSet
+                val recall_i = intersection_i.size.toDouble / i.toDouble
+                recall_i
+            } else {
+                0
+            }
+        }).sum
 
+        errorCollector.collect(errors, recall, apk)
+    }
 
     /**
      * Calcula el error por índice para un punto.
