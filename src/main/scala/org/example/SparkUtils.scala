@@ -105,7 +105,7 @@ object SparkUtils {
         Utils.quiet_logs()
 
         val spark = SparkSession.builder
-            .master("local[*]")
+            .master("local[3]")
             .appName("Simple Application")
             .config("spark.driver.maxResultSize", "0")
             .config("spark.driver.memory", "16g")

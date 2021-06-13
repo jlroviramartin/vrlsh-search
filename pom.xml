@@ -67,6 +67,12 @@
             </exclusions>
         </dependency>
 
+        <dependency>
+            <groupId>commons-io</groupId>
+            <artifactId>commons-io</artifactId>
+            <version>2.9.0</version>
+        </dependency>
+
         <!-- https://index.scala-lang.org/altoo-ag/akka-kryo-serialization/akka-kryo-serialization/2.1.0?target=_2.13 -->
         <!-- <dependency>
             <groupId>io.altoo</groupId>

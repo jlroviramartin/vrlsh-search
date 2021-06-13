@@ -223,7 +223,7 @@ object TestingUtils {
 
                 //if (approx.count() < k)
                 if (!approx.forall(id => realMap.contains(id))) {
-                    println(s"El punto $queryId NO encontró solución estable")
+                    println(s"El punto $queryId NO solución dentro de groundTruth")
                 }
 
                 val errors = approx.zipWithIndex.map { case (id, index) => {
