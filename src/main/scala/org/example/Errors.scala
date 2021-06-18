@@ -30,7 +30,7 @@ object Errors {
      * @param query
      * @param errorCollector
      */
-    def checkError(data: RDD[(Long, Vector)],
+    /*def checkError(data: RDD[(Long, Vector)],
                    approximateResult: Iterable[(Double, Long)], // Iterable[(distance: Double, id: Long)]
                    distanceEvaluator: KnnDistance,
                    k: Int,
@@ -132,18 +132,10 @@ object Errors {
         val intersection = solution.toSet & calculated.toSet
         val recall = intersection.size.toDouble / k.toDouble
 
-        val apk = (1 / k.toDouble) * (1 to k).map((i: Int) => {
-            if (i < calculated.length && solution.contains(calculated(i))) {
-                val intersection_i = solution.toSet & calculated.take(i).toSet
-                val recall_i = intersection_i.size.toDouble / i.toDouble
-                recall_i
-            } else {
-                0
-            }
-        }).sum
+        val apk = evaluateAPK(k, calculated, solution)
 
         errorCollector.collect(errors, recall, apk)
-    }
+    }*/
 
     /**
      * Calcula el error por índice para un punto.
@@ -214,5 +206,83 @@ object Errors {
             .sum
         // Average
         sum / k
+    }
+
+    def evaluateRecall(k: Int, approx: Array[Long], realResult: Array[Long]): Double = {
+        val intersection = realResult.toSet & approx.toSet
+        val recall = intersection.size.toDouble / k.toDouble
+        recall
+    }
+
+    def evaluateApproximateRatio(k: Int, approxDistances: Array[Double], realDistances: Array[Double]): Double = {
+        val sz = Math.min(k, approxDistances.length)
+
+        val c = (1 / sz.toDouble) * ((1 to sz)
+            .map((i: Int) => {
+                val index = i - 1
+
+                var n = approxDistances(index)
+                if (n < 0.000001) n += 0.000001
+                var m = realDistances(index)
+                if (m < 0.000001) m += 0.000001
+                n / m
+            }).sum)
+        c
+    }
+
+    def evaluateAPK(k: Int, approx: Array[Long], realResult: Array[Long]): Double = {
+        /*val apk = (1 / k.toDouble) * ((1 to k).map((i: Int) => {
+            val index = i - 1
+
+            if (index < approx.length && realResult.contains(approx(index))) {
+                val intersection_i = realResult.toSet & approx.take(i).toSet
+                val recall_i = intersection_i.size.toDouble / i.toDouble
+                recall_i
+            } else {
+                0
+            }
+        }).sum)
+        apk*/
+
+        val sz = Math.min(k, approx.length)
+        //val sz = k
+
+        val apk = (1 / sz.toDouble) * ((1 to sz)
+            .map((i: Int) => {
+                val index = i - 1
+
+                if (index < approx.length && realResult.contains(approx(index))) {
+                    val intersection_i = realResult.toSet & approx.take(i).toSet
+                    val recall_i = intersection_i.size.toDouble / i.toDouble
+                    recall_i
+                } else {
+                    0
+                }
+            }).sum)
+        apk
+    }
+
+    /*def evaluateAPK2(k: Int, approx: Array[Long], realResult: Array[Long]): Double = {
+        var sum = 0.0
+        var c = 0.0
+        (1 to k).foreach(i => {
+            val index = i - 1
+
+            if (index < approx.length && realResult.contains(approx(index))) {
+                c += 1
+            }
+            sum += c / i.toDouble
+        })
+        val avgPrecision = sum / k.toDouble
+        avgPrecision
+    }*/
+
+    def evaluateMAPK(result: Iterable[Double]): Double = {
+        result.sum / result.size.toDouble
+    }
+
+    def evaluateMAPK_v2(k: Int, approx: Iterable[Array[Long]], realResult: Iterable[Array[Long]]): Double = {
+        evaluateMAPK(approx.zip(realResult)
+            .map { case (a, b) => evaluateAPK(k, a, b) })
     }
 }

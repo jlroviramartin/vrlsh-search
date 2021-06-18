@@ -11,6 +11,8 @@ import java.nio.file.{Files, Path, Paths}
 import java.util.{Calendar, Date}
 import org.example.Utils.{MAX_TOLERANCE, MIN_TOLERANCE, RANDOM_SEED, time}
 import org.example.evaluators.{Hasher, HasherFactory, LoadHasherFactory}
+import org.example.statistics.DefaultStatisticsCollector
+import org.example.testing.TestingUtils.{doQueriesWithResult, time_doQueriesWithResult}
 
 import java.io.{File, FileOutputStream}
 import java.text.SimpleDateFormat
@@ -19,79 +21,96 @@ import scala.collection._
 
 // How to turn off INFO logging in Spark? https://stackoverflow.com/a/26123496
 object VrlshApp {
+    val GROUND_TRUTH_SIZE = 1000
+
     def main(args: Array[String]) {
+        val spark = SparkUtils.initSpark("3")
 
         //val fos = new FileOutputStream(new File("C:/Temp/log.txt"))
-        val fos = System.out
-
-        val spark = SparkUtils.initSpark()
-
-        /*
-                val format = new SimpleDateFormat("d-M-y H:m:s")
-
-                val start = Calendar.getInstance().getTime()
-                println(start)
-
-                val distanceEvaluator = new KnnEuclideanSquareDistance
-
-                val test = SparkUtils.readDataFileByFilename(spark.sparkContext, "C:\\datasets\\gist\\gist_query.csv")
-                val query = test.first()._2
-
-                val knnResult = SparkUtils.readDataFileByFilename(spark.sparkContext, "C:\\datasets\\gist\\gist_base.csv")
-                    .map { case (id, v) => (distanceEvaluator.distance(query, v), id) }
-                    .aggregate(new KnnResult())(KnnResult.seqOp(50), KnnResult.combOp(50))
-
-                val end = Calendar.getInstance().getTime()
-                println(end)
-                println(TimeUnit.MILLISECONDS.toSeconds(end.getTime - start.getTime))
-        */
 
         // Calculan los nuevos datasets
-        Console.withOut(fos) {
-            val testOptions = new TestOptions()
-            testOptions.datasets = Array(/*"siftsmall",*/ "audio"/*, "sift"*/)
-            //testOptions.trainRatio = 0.999 // 1000 testing
-            testOptions.dataFilePath = immutable.Map(
-                "siftsmall" -> Paths.get("C:\\datasets\\siftsmall\\siftsmall_base.csv"),
-                "audio" -> Paths.get("C:\\datasets\\audio\\audio_base.csv"),
-                "gist" -> Paths.get("C:\\datasets\\gist\\gist_base.csv"),
-                "sift" -> Paths.get("C:\\datasets\\sift\\sift_base.csv"))
-            testOptions.testFilePath = immutable.Map(
-                "siftsmall" -> Paths.get("C:\\datasets\\siftsmall\\siftsmall_query.csv"),
-                "audio" -> Paths.get("C:\\datasets\\audio\\audio_query.csv"),
-                "gist" -> Paths.get("C:\\datasets\\gist\\gist_query.csv"),
-                "sift" -> Paths.get("C:\\datasets\\sift\\sift_query.csv"))
-            testOptions.ts = Array(5, 10, 20, 40, 80)
-            testOptions.ks = Array(100)
+        val testOptions = new TestOptions()
+        /*testOptions.datasets = Array(/*"siftsmall",*/ "audio" /*, "sift"*/)
+        //testOptions.trainRatio = 0.999 // 1000 testing
+        testOptions.dataFilePath = immutable.Map(
+            "siftsmall" -> Paths.get("C:\\datasets\\siftsmall\\siftsmall_base.csv"),
+            "audio" -> Paths.get("C:\\datasets\\audio\\audio_base.csv"),
+            "gist" -> Paths.get("C:\\datasets\\gist\\gist_base.csv"),
+            "sift" -> Paths.get("C:\\datasets\\sift\\sift_base.csv"))
+        testOptions.testFilePath = immutable.Map(
+            "siftsmall" -> Paths.get("C:\\datasets\\siftsmall\\siftsmall_query.csv"),
+            "audio" -> Paths.get("C:\\datasets\\audio\\audio_query.csv"),
+            "gist" -> Paths.get("C:\\datasets\\gist\\gist_query.csv"),
+            "sift" -> Paths.get("C:\\datasets\\sift\\sift_query.csv"))
+        testOptions.ts = Array(5, 10, 20, 40, 80)
+        testOptions.ks = Array(100)*/
 
-            val DIRECTORY = "C:/result/vrlsh-fufu"
+        testOptions.datasets = Array(/*"siftsmall", "corel", "shape", "audio",*/ "sift")
+        testOptions.dataFilePath = immutable.Map(
+            "corel" -> Paths.get("C:\\datasets\\corel\\corel_random_652317.csv"),
+            "shape" -> Paths.get("C:\\datasets\\shape\\shape_random_27775.csv"),
+            "siftsmall" -> Paths.get("C:\\datasets\\siftsmall\\siftsmall_base_random_9900.csv"),
+            "audio" -> Paths.get("C:\\datasets\\audio\\audio_base_random_53387.csv"),
+            "sift" -> Paths.get("C:\\datasets\\sift\\sift_base_random_990000.csv"))
+        testOptions.testFilePath = immutable.Map(
+            "corel" -> Paths.get("C:\\datasets\\corel\\corel_random_10000.csv"),
+            "shape" -> Paths.get("C:\\datasets\\shape\\shape_random_1000.csv"),
+            "siftsmall" -> Paths.get("C:\\datasets\\siftsmall\\siftsmall_base_random_100.csv"),
+            "audio" -> Paths.get("C:\\datasets\\audio\\audio_base_random_1000.csv"),
+            "sift" -> Paths.get("C:\\datasets\\sift\\sift_base_random_10000.csv"))
+        testOptions.ts = Array(5, 10, 20, 40, 80)
+        testOptions.ks = Array(100)
+        //testOptions.samples = 1000
 
-            // Se guardan los hashers: dataset -> DIRECTORY/<name>/<desiredSize>/hasher.dat
+        val DIRECTORY = "C:/result/vrlsh-6"
+
+        time(spark, testOptions, DIRECTORY)
+
+        // Se guardan los hashers: dataset -> DIRECTORY/<name>/<desiredSize>/hasher.dat
+        /*{
             println("=====> storeAllHashers =====")
+            SparkUtils.updateCores(spark, "3")
             storeAllHashers(spark, testOptions, DIRECTORY)
+        }*/
 
-            // Se guardan los resultados: dataset -> DIRECTORY/<name>/<desiredSize>/KnnQuery.dat
-            //                                       DIRECTORY/<name>/<desiredSize>/data/
-            //                                       DIRECTORY/<name>/<desiredSize>/model/
+        // Se guardan los resultados: dataset -> DIRECTORY/<name>/<desiredSize>/KnnQuery.dat
+        //                                       DIRECTORY/<name>/<desiredSize>/data/
+        //                                       DIRECTORY/<name>/<desiredSize>/model/
+        /*{
             println("=====> storeAll =====")
+            SparkUtils.updateCores(spark, "3")
             storeAll(spark, testOptions, DIRECTORY)
+        }*/
 
-            // Se guardan las máximas distancias: testset -> DIRECTORY/<name>/max-distances.csv
+        //printVrlsh(spark, testOptions, DIRECTORY)
+
+        // Se guardan las máximas distancias: testset -> DIRECTORY/<name>/max-distances.csv
+        /*{
             println("=====> maxDistances =====")
-            //maxDistances(spark, testOptions, DIRECTORY)
+            SparkUtils.updateCores(spark, "*")
+            maxDistances(spark, testOptions, DIRECTORY)
+        }*/
 
-            // Se guardan los resultados reales: testset -> DIRECTORY/groundtruth/<name>/<size>/groundtruth.csv
+        // Se guardan los resultados reales: testset -> DIRECTORY/groundtruth/<name>/<size>/groundtruth.csv
+        /*{
             println("=====> groundTruthAll =====")
-            //groundTruthAll(spark, testOptions, s"$DIRECTORY/groundtruth", 1000)
+            SparkUtils.updateCores(spark, "*")
+            groundTruthAll(spark, testOptions, s"$DIRECTORY/groundtruth", GROUND_TRUTH_SIZE)
+        }*/
 
-            // Se evaluan los knn: testset -> DIRECTORY/result/<name>/<k>/result.csv
-            //                                DIRECTORY/result/<name>/<k>/statistics.csv
+        // Se evaluan los knn: testset -> DIRECTORY/result/<name>/<k>/result.csv
+        //                                DIRECTORY/result/<name>/<k>/statistics.csv
+        {
             println("=====> evaluations =====")
+            SparkUtils.updateCores(spark, "*")
             evaluations(spark, testOptions, DIRECTORY)
+        }
 
-            // Se evalua el error: testset -> DIRECTORY/statistics/<name>/global-statistics.csv
-            //                                DIRECTORY/statistics/<name>/quality-statistics.csv
+        // Se evalua el error: testset -> DIRECTORY/statistics/<name>/global-statistics.csv
+        //                                DIRECTORY/statistics/<name>/quality-statistics.csv
+        {
             println("=====> evaluateError =====")
+            SparkUtils.updateCores(spark, "*")
             evaluateError(spark, testOptions, DIRECTORY)
         }
 
@@ -150,14 +169,90 @@ object VrlshApp {
                     Files.createDirectories(baseDirectory)
 
                     val hasherFactory = new LoadHasherFactory(baseDirectory)
-
-                    KnnTest.createAndStore(data, hasherFactory, baseDirectory, k, t)
+                    VrlshKnnConstructionAlgorithm.createAndStore(data, hasherFactory, desiredSize, baseDirectory)
                 }
             }
         }
     }
 
-    def storeApproximateResult(spark: SparkSession,
+    def time(spark: SparkSession,
+             testOptions: TestOptions,
+             outputPath: String): Unit = {
+        val sc = spark.sparkContext
+        val distanceEvaluator = new KnnEuclideanSquareDistance
+
+        val result = testOptions.datasets.flatMap { name =>
+            println(s"===== $name =====")
+
+            // Dataset
+            val data = testOptions.loadDataFile(sc, name)
+
+            // Testing data
+            val queries = testOptions.loadTestFileWithId(sc, name)
+            val size = queries.size
+
+            testOptions.ts.flatMap { t =>
+                println(s"  === $t: ${new Date(System.currentTimeMillis())} =====")
+
+                testOptions.ks.map { k =>
+                    println(s"    = $k: ${new Date(System.currentTimeMillis())} =====")
+
+                    val desiredSize = t * k
+
+                    val baseDirectory = Paths.get(outputPath, s"$name/$desiredSize")
+
+                    val constructionTime = {
+                        val hasherFactory = new LoadHasherFactory(baseDirectory)
+
+                        val begin = System.currentTimeMillis()
+                        VrlshKnnConstructionAlgorithm.time_createAndStore(data, hasherFactory, desiredSize, baseDirectory)
+                        System.currentTimeMillis() - begin
+                    }
+
+                    val queryTime = {
+                        // Se construye/deserializa el objeto knnQuery
+                        val knnQuery = VrlshKnnConstructionAlgorithm.load(sc, baseDirectory)
+
+                        val begin2 = System.currentTimeMillis()
+                        time_doQueriesWithResult(knnQuery, distanceEvaluator, k, queries.toList, new DefaultStatisticsCollector())
+                        (System.currentTimeMillis() - begin2) / size.toDouble
+                    }
+
+                    (name, t, k, desiredSize, constructionTime, queryTime)
+                }
+            }
+        }
+
+        val names = testOptions.datasets.reduce((a, b) => a + "_" + b)
+        val outputDirectory = Paths.get(outputPath, s"statistics/$names")
+
+        CsvUtils.storeTimeResult(outputDirectory, result.to[immutable.Iterable])
+    }
+
+    def printVrlsh(spark: SparkSession,
+                   testOptions: TestOptions,
+                   outputPath: String): Unit = {
+        testOptions.datasets.foreach { name =>
+            println(s"===== $name =====")
+
+            testOptions.ts.foreach { t =>
+                println(s"  === $t: ${new Date(System.currentTimeMillis())} =====")
+
+                testOptions.ks.foreach { k =>
+                    println(s"    = $k: ${new Date(System.currentTimeMillis())} =====")
+
+                    val desiredSize = t * k
+
+                    val baseDirectory = Paths.get(outputPath, s"$name/$desiredSize")
+
+                    val knnQuery = VrlshKnnConstructionAlgorithm.load(spark.sparkContext, baseDirectory)
+                    knnQuery.printResume()
+                }
+            }
+        }
+    }
+
+    /*def storeApproximateResult(spark: SparkSession,
                                testOptions: TestOptions,
                                inputPath: String): Unit = {
         val sc = spark.sparkContext
@@ -186,7 +281,7 @@ object VrlshApp {
                 }
             }
         }
-    }
+    }*/
 
     def groundTruthAll(spark: SparkSession,
                        testOptions: TestOptions,
@@ -201,14 +296,17 @@ object VrlshApp {
             val data = testOptions.loadDataFile(sc, name)
 
             // Testing data
-            val testing = testOptions.loadTestFileWithId(sc, name)
+            val queries = testOptions.loadTestFileWithId(sc, name)
 
             println(s"    = $k: ${new Date(System.currentTimeMillis())} =====")
 
             val baseDirectory = Paths.get(inputPath, s"$name/$k")
             Files.createDirectories(baseDirectory)
 
-            KnnTest.storeGroundTruth(data, baseDirectory, testing.to[immutable.Iterable], k)
+            val distanceEvaluator = new KnnEuclideanSquareDistance
+            val result = TestingUtils.doGroundTruth(data, distanceEvaluator, k, queries.toIterator)
+
+            CsvUtils.storeGroundTruth(baseDirectory, result, k)
         }
     }
 
@@ -231,7 +329,10 @@ object VrlshApp {
             val baseDirectory = Paths.get(inputPath, s"$name")
             Files.createDirectories(baseDirectory)
 
-            KnnTest.storeMaxDistances(data, baseDirectory, queries.to[immutable.Iterable])
+            val distanceEvaluator = new KnnEuclideanSquareDistance
+            val result = TestingUtils.doMaxDistances(data, distanceEvaluator, queries.toIterator)
+
+            CsvUtils.storeMaxDistances(baseDirectory, result)
         }
     }
 
@@ -249,16 +350,7 @@ object VrlshApp {
             // Testing data
             val queries = testOptions.loadTestFileWithId(sc, name)
 
-            val envelope = data
-                .map { case (_, point) => point }
-                .aggregate(EnvelopeDouble.EMPTY)(
-                    EnvelopeDouble.seqOp,
-                    EnvelopeDouble.combOp)
-
             val distanceEvaluator = new KnnEuclideanSquareDistance
-
-            val count = data.count()
-            val maxDistance = envelope.maxDistance(distanceEvaluator)
 
             testOptions.ts.foreach { t =>
                 testOptions.ks.foreach { k =>
@@ -268,15 +360,58 @@ object VrlshApp {
                     val outputDirectory = Paths.get(inputPath, s"result/$name/$desiredSize")
                     Files.createDirectories(outputDirectory)
 
-                    KnnTest.storeApproximateResult(sc,
-                        baseDirectory,
-                        outputDirectory,
-                        queries.to[immutable.Iterable],
-                        k)
+                    // Se construye/deserializa el objeto knnQuery
+                    val knnQuery = VrlshKnnConstructionAlgorithm.load(sc, baseDirectory)
+
+                    println("==== Evaluating =====")
+
+                    val statistics = new DefaultStatisticsCollector()
+                    val result = doQueriesWithResult(knnQuery, distanceEvaluator, k, queries.toList, statistics)
+
+                    CsvUtils.storeApproximateResult(outputDirectory, result, k)
+                    statistics.csv(outputDirectory.resolve("statistics.csv"))
                 }
             }
         }
     }
+
+    /*def time_evaluations(spark: SparkSession,
+                         testOptions: TestOptions,
+                         inputPath: String): Unit = {
+        val sc = spark.sparkContext
+
+        testOptions.datasets.foreach { name =>
+            println(s"## Dataset $name")
+
+            // Dataset
+            val data = testOptions.loadDataFile(sc, name)
+
+            // Testing data
+            val queries = testOptions.loadTestFileWithId(sc, name)
+
+            val distanceEvaluator = new KnnEuclideanSquareDistance
+
+            testOptions.ts.foreach { t =>
+                testOptions.ks.foreach { k =>
+                    val desiredSize = t * k
+
+                    val baseDirectory = Paths.get(inputPath, s"$name/$desiredSize")
+
+                    // Se construye/deserializa el objeto knnQuery
+                    val knnQuery = VrlshKnnConstructionAlgorithm.load(sc, baseDirectory)
+
+                    println("==== Evaluating =====")
+
+                    val statistics = new DefaultStatisticsCollector()
+                    val begin = System.currentTimeMillis()
+                    time_doQueriesWithResult(knnQuery, distanceEvaluator, k, queries.toList, statistics)
+                    val milis = System.currentTimeMillis() - begin
+
+                    println(s"    Evaluation time: ${milis}")
+                }
+            }
+        }
+    }*/
 
     def evaluateError(spark: SparkSession,
                       testOptions: TestOptions,
@@ -306,9 +441,9 @@ object VrlshApp {
 
                     val knnQuery = VrlshKnnConstructionAlgorithm.load(data.sparkContext, baseDirectory)
 
-                    val gtSize = 1000
-                    val gt = Paths.get(inputPath, s"groundtruth/$name/$gtSize/groundtruth.csv")
-                    val groundTruth = SparkUtils.readGroundTruthFileByFilename(sc, gt.toString)
+                    val gtSize = GROUND_TRUTH_SIZE
+                    val gtFile = Paths.get(inputPath, s"groundtruth/$name/$gtSize/groundtruth.csv")
+                    val groundTruth = SparkUtils.readGroundTruthFileByFilename(sc, gtFile.toString)
 
                     val appoxFile = Paths.get(inputPath, s"result/$name/$desiredSize/result.csv")
                     val approximateResult = SparkUtils.readApproxFileByFilename(sc, appoxFile.toString)
@@ -336,7 +471,7 @@ object VrlshApp {
                 }
             }
         }
-        KnnTest.storeQuality(quality, outputDirectory)
+        CsvUtils.storeQuality(outputDirectory, quality)
 
         println("Global statistics")
 
@@ -364,6 +499,6 @@ object VrlshApp {
                 }
             }
         }
-        KnnTest.storeGlobal(gobal, outputDirectory)
+        CsvUtils.storeGlobal(outputDirectory, gobal)
     }
 }

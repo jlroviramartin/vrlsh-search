@@ -122,7 +122,8 @@ class VrlshKnnConstructionAlgorithm(val hasherFactory: HasherFactory,
             val dataForBuckets = currentData
                 .subtractByKey(
                     hashWithNumPoints.filter { case (_, numPoints) => !savedBucketCondition(numPoints) }
-                ) /*----- .cache()*/
+                )
+            /*----- .cache()*/
 
             println("dataForBuckets.isEmpty")
 
@@ -195,6 +196,109 @@ class VrlshKnnConstructionAlgorithm(val hasherFactory: HasherFactory,
         new VrlshKnnQuery(baseDirectory, result, hasherMap, lookupProvider)
     }
 
+    def time_build(data: RDD[(Long, Vector)]): Unit = {
+
+        // Contexto de Spark
+        val sc = data.sparkContext
+
+        val dimension = data.first()._2.size
+
+        val (hasher, hashOptions, radius) = hasherFactory.getHasherForDataset(data, dimension, desiredSize)
+
+        var currentHasher = hasher
+        val lookupProvider = new BroadcastLookupProvider(data)
+        var currentIndices = data.map { case (id, _) => id }
+        /*----- .cache()*/
+        var currentRadius = radius
+        var iteration = 0
+
+        val maxIterations = 100
+
+        // Resultado
+        var result: RDD[(Double, Hash, List[Long])] = sc.emptyRDD
+        val hasherMap = new KnnMetadata()
+
+        // Condición para formar un bucket. Aquellos que no la cumplan van a la siguiente ronda.
+        val M = max
+        val m = min
+        var bucketCondition = (size: Int) => size >= m && size <= M
+
+        var count = currentIndices.count()
+
+        while (count > 0) {
+            // Se guarda currentRadius porque se modifica al final del while y produce si se utiliza dentro de
+            // operaciones en RDDs
+            val savedRadius = currentRadius
+
+            val savedHasher = currentHasher
+
+            val currentData = currentIndices
+                .flatMap(id => savedHasher.hash(lookupProvider.lookup(id), savedRadius).map(hash => (hash, id)))
+            /*----- .cache()*/
+
+            if (forAll(currentData) { case (hash, _) => isBaseHashPoint(hash) }) {
+                ////////////////////////////////////////////////////////////////////////////////////////////////////
+                // En la iteración actual TODOS forman buckets
+                // -----> bucketCondition = _ => true
+                ////////////////////////////////////////////////////////////////////////////////////////////////////
+            }
+
+            ////////////////////////////////////////////////////////////////////////////////////////////////////////
+            var isLast = false
+            if (count < min) {
+                bucketCondition = _ => true
+                isLast = true
+            } else if (iteration > maxIterations) {
+                bucketCondition = _ => true
+                isLast = true
+            }
+            ////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+            val savedBucketCondition = bucketCondition
+
+            // Se calculan los buckets (hash) y el número de puntos en cada uno
+            val hashWithNumPoints = currentData
+                .aggregateByKey(0)(
+                    { case (numPoints, _) => numPoints + 1 },
+                    (numPoints1, numPoints2) => numPoints1 + numPoints2)
+                .cache()
+
+            // Se calculan los datos que se van a usar para los buckets
+            val dataForBuckets = currentData
+                .subtractByKey(
+                    hashWithNumPoints.filter { case (_, numPoints) => !savedBucketCondition(numPoints) }
+                )
+            /*----- .cache()*/
+
+            if (!dataForBuckets.isEmpty()) {
+                // Se actualiza el resultado
+                result = result.union(dataForBuckets
+                    .aggregateByKey(List[Long]())(
+                        { case (list, id) => id :: list },
+                        { case (list1, list2) => list1 ++ list2 }
+                    )
+                    .map { case (hash, ids) => (savedRadius, hash, ids) })
+                hasherMap.put(savedRadius, savedHasher)
+
+                // Se calculan los nuevos índices
+                val usedIndices = dataForBuckets
+                    .map { case (_, id) => id }
+                currentIndices = currentIndices.subtract(usedIndices)
+                    .cache()
+
+                count = currentIndices.count()
+            }
+
+            // Se incrementa el radio
+            currentRadius = currentRadius * radiusMultiplier
+
+            // Se crea un nuevo hasher
+            currentHasher = hashOptions.newHasher()
+
+            iteration = iteration + 1
+        }
+    }
+
     private def showStatistics(hashWithNumPoints: RDD[(Hash, Int)], bucketCondition: Int => Boolean): Unit = {
         println("    Estadísticas: Número de puntos - Número de buckets")
         time("    Se actualizan las estadísticas") {
@@ -254,6 +358,13 @@ object VrlshKnnConstructionAlgorithm {
         DataStore.kstore(baseDirectory.resolve("KnnQuery.dat"), knnQuery.getSerializable())
 
         knnQuery
+    }
+
+    def time_createAndStore(data: RDD[(Long, Vector)],
+                            hasherFactory: HasherFactory,
+                            desiredSize: Int,
+                            baseDirectory: Path): Unit = {
+        new VrlshKnnConstructionAlgorithm(hasherFactory, desiredSize, baseDirectory.toString).time_build(data)
     }
 
     def load(sc: SparkContext,
@@ -364,25 +475,6 @@ class VrlshKnnQuery(val baseDirectory: String,
             statistics.keyLength = hasher.keyLength
             statistics.dimension = hasher.dimension
 
-            /*
-            println("radius | Num. buckets | Num. points")
-            println(":- | :-")
-            radiuses.foreach(radius => {
-                val forRadius = mapRadiusHashToPoints(radius)
-                val numBuckets = forRadius.size
-                val numPoints = forRadius.map { case (_, points) => points.length }.sum
-                //val hasher = hasherMap.getHasher(radius).get
-
-                val bucketStatistics = new BucketStatistics
-                bucketStatistics.radius = radius
-                bucketStatistics.numBuckets = numBuckets
-                bucketStatistics.numPoints = numPoints
-
-                println(s"$radius | $numBuckets | $numPoints")
-            })
-            println()
-            */
-
             val totalBuckets = radiuses.map(radius => mapRadiusHashToPoints(radius).size).sum
             val totalPoints = radiuses.map(radius => mapRadiusHashToPoints(radius).map { case (hash, points) => points.size }.sum).sum
             val totalLevels = radiuses.size
@@ -392,14 +484,56 @@ class VrlshKnnQuery(val baseDirectory: String,
             statistics.totalNumBuckets = totalBuckets
             statistics.totalNumPoints = totalPoints
             statistics.totalNumLevels = totalLevels
+        }
 
-            /*
-            println("**Last level**")
-            println("---")
-            println()
+        statistics
+    }
+
+
+    def printResume(): Unit = {
+        // Todos los hashers son iguales
+        if (radiuses.nonEmpty) {
+            //val hasher = hasherMap.getHasher(radiuses.head).get.asInstanceOf[EuclideanHasher]
+
+            /*println("radius | Num. buckets | Num. points")
+            println(":- | :-")
+            radiuses
+                .filter(radius => (radius != radiuses.last))
+                .foreach(radius => {
+                    val forRadius = mapRadiusHashToPoints(radius)
+                    val numBuckets = forRadius.size
+                    val numPoints = forRadius.map { case (_, points) => points.length }.sum
+                    //val hasher = hasherMap.getHasher(radius).get
+
+                    println(s"$radius | $numBuckets | $numPoints")
+                })*/
+
+            val numBuckets = radiuses
+                .filter(radius => (radius != radiuses.last))
+                .flatMap(radius => mapRadiusHashToPoints(radius).map { case (hash, array) => hash })
+                .size
+
+            val numPoints = radiuses
+                .filter(radius => (radius != radiuses.last))
+                .flatMap(radius => mapRadiusHashToPoints(radius).flatMap { case (hash, array) => array })
+                .size
+
+            val numUniquePoints = radiuses
+                .filter(radius => (radius != radiuses.last))
+                .flatMap(radius => mapRadiusHashToPoints(radius).flatMap { case (hash, array) => array })
+                .toSet
+                .size
+            println(s"puntos=$numPoints únicos=$numUniquePoints buckets=$numBuckets")
+
+            val totalBuckets = radiuses.map(radius => mapRadiusHashToPoints(radius).size).sum
+            val totalPoints = radiuses.map(radius => mapRadiusHashToPoints(radius).map { case (hash, points) => points.size }.sum).sum
+            val totalLevels = radiuses.size
+            val fraction = totalPoints / lookupProvider.size.toDouble
+
+            println("Último nivel")
 
             val forRadius = mapRadiusHashToPoints(radiuses.last)
-            println("Num. points | Count")
+            /*println("Num. points | Count")
             println(":- | :-")
             forRadius
                 .toList
@@ -408,11 +542,23 @@ class VrlshKnnQuery(val baseDirectory: String,
                 .map { case (numPoints, count) => (numPoints, count.length) }
                 .toList
                 .sortBy { case (numPoints, count) => numPoints }
-                .foreach { case (numPoints, count) => println(s"$numPoints | $count") }
-            */
-        }
+                .foreach { case (numPoints, count) => println(s"$numPoints | $count") }*/
 
-        statistics
+            val numBucketsInLastLevel = forRadius
+                .size
+
+            val numPointsInLastLevel = forRadius
+                .toList
+                .map { case (hash, ids) => ids.length }
+                .sum
+
+            val numUniquePointsInLastLevel = forRadius
+                .toList
+                .flatMap { case (hash, ids) => ids }
+                .toSet
+                .size
+            println(s"puntos=$numPointsInLastLevel únicos=$numUniquePointsInLastLevel buckets=$numBucketsInLastLevel")
+        }
     }
 }
 

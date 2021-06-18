@@ -90,7 +90,7 @@ object SparkUtils {
         }
     }
 
-    def initSpark(): SparkSession = {
+    def initSpark(cores: String = "*"): SparkSession = {
         // https://dzone.com/articles/working-on-apache-spark-on-windows
         // https://stackoverflow.com/questions/35652665/java-io-ioexception-could-not-locate-executable-null-bin-winutils-exe-in-the-ha
         // https://medium.com/big-data-engineering/how-to-install-apache-spark-2-x-in-your-pc-e2047246ffc3
@@ -105,7 +105,7 @@ object SparkUtils {
         Utils.quiet_logs()
 
         val spark = SparkSession.builder
-            .master("local[3]")
+            .master(s"local[$cores]")
             .appName("Simple Application")
             .config("spark.driver.maxResultSize", "0")
             .config("spark.driver.memory", "16g")
@@ -120,6 +120,10 @@ object SparkUtils {
             .getOrCreate()
 
         spark
+    }
+
+    def updateCores(sc: SparkSession, cores: String = "*"): Unit = {
+        sc.conf.set("spark.master", s"local[$cores]")
     }
 
     def readDataFileByFilename(sc: SparkContext, file: String): RDD[(Long, Vector)] = {

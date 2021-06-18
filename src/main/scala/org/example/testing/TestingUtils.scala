@@ -48,7 +48,7 @@ object TestingUtils {
         (0 until count).map(_ => randomOutside(envelope, factor))
     }
 
-    def doQueries(knnQuery: KnnQuery,
+    /*def doQueries(knnQuery: KnnQuery,
                   data: RDD[(Long, Vector)],
                   distanceEvaluator: KnnDistance,
                   k: Int,
@@ -72,7 +72,7 @@ object TestingUtils {
                 doQuery(knnQuery, data, distanceEvaluator, k, query, statistics, errorCollector)
             }
             }
-    }
+    }*/
 
     def doQueriesWithResult(knnQuery: KnnQuery,
                             distanceEvaluator: KnnDistance,
@@ -98,6 +98,24 @@ object TestingUtils {
             }
     }
 
+    def time_doQueriesWithResult(knnQuery: KnnQuery,
+                                 distanceEvaluator: KnnDistance,
+                                 k: Int,
+                                 queries: immutable.Iterable[(Long, Vector)],
+                                 statistics: StatisticsCollector): Unit = {
+        queries
+            .zipWithIndex
+            .map { case ((id, query), index) => {
+                if (index % 100 == 0) {
+                    println(s"    == $index")
+                    println()
+                }
+
+                knnQuery.query(query, k, distanceEvaluator, statistics)
+            }
+            }
+    }
+
     /**
      * Realiza la consulta de un punto.
      *
@@ -108,7 +126,7 @@ object TestingUtils {
      * @param k        K.
      * @return Errores: (indexError, distanceError, numberOfPoints).
      */
-    def doQuery(knnQuery: KnnQuery,
+    /*def doQuery(knnQuery: KnnQuery,
                 data: RDD[(Long, Vector)],
                 distanceEvaluator: KnnDistance,
                 k: Int,
@@ -128,7 +146,7 @@ object TestingUtils {
             k,
             query,
             errorCollector)
-    }
+    }*/
 
     /*def doFastQueries(knnQuery: KnnQuery,
                       distanceEvaluator: KnnDistance,
@@ -200,55 +218,62 @@ object TestingUtils {
 
         val lookupProvider = new BroadcastLookupProvider(data)
 
-        queries
-            .join(approximateResult.join(groundTruth.join(maxDistances)))
+        queries.join(approximateResult.join(groundTruth.join(maxDistances)))
             .map { case (queryId, (queryPoint, (approx, (ground, maxDistance)))) => {
 
                 // Se obtienen los k primeros elementos teniendo en cuenta que dos o mas puntos pueden estar a igual
                 // distancia del punto consulta (puede haber mas de k)
-                val realResult = ground
+                /*val realResult = ground
                     .map(groundId => (groundId, distanceEvaluator.distance(queryPoint, lookupProvider.lookup(groundId))))
                     .groupBy { case (_, distance) => distance }
                     .map { case (distance, arrayOfIdAndDistance) => (distance, arrayOfIdAndDistance.map { case (id, _) => id }) }
                     .toArray
                     .sortBy { case (distance, _) => distance }
                     .take(k)
-                    .flatMap { case (_, arrayOfId) => arrayOfId }
+                    .flatMap { case (_, arrayOfId) => arrayOfId }*/
+                val realResult = ground
+                    .map(groundId => (distanceEvaluator.distance(queryPoint, lookupProvider.lookup(groundId)), groundId))
+                    .sortBy { case (distance, _) => distance }
+                    .map { case (_, id) => id }
+                    .take(k)
 
                 // Mapa del id del punto real a su índice y distancia
                 val realMap = ground
                     .zipWithIndex
-                    .map { case (id, index) => (id, (index, distanceEvaluator.distance(queryPoint, lookupProvider.lookup(id)))) }
+                    .map { case (groundId, index) => (groundId, (index, distanceEvaluator.distance(queryPoint, lookupProvider.lookup(groundId)))) }
                     .toMap
 
                 //if (approx.count() < k)
-                if (!approx.forall(id => realMap.contains(id))) {
-                    println(s"El punto $queryId NO solución dentro de groundTruth")
-                }
+                //if (!approx.forall(id => realMap.contains(id))) {
+                //    println(s"El punto $queryId NO encuentra solución dentro de groundTruth")
+                //}
 
-                val errors = approx.zipWithIndex.map { case (id, index) => {
-                    val distance = distanceEvaluator.distance(queryPoint, lookupProvider.lookup(id))
+                val errors = approx
+                    .filter(id => id >= 0)
+                    .zipWithIndex
+                    .map { case (id, index) => {
+                        val distance = distanceEvaluator.distance(queryPoint, lookupProvider.lookup(id))
 
-                    if (realMap.contains(id)) {
-                        val (realIndex, realDistance) = realMap(id)
+                        if (realMap.contains(id)) {
+                            val (realIndex, realDistance) = realMap(id)
 
-                        val indexError = Errors.localIndexError(index, realIndex, maxIndex)
-                        val distanceErrorNorm = Errors.localDistanceError(distance, realDistance, count)
-                        val distanceError = Errors.distanceError(distance, realDistance)
-                        val approxRatio = Errors.approximationRatio(distance, realDistance)
+                            val indexError = Errors.localIndexError(index, realIndex, maxIndex)
+                            val distanceErrorNorm = Errors.localDistanceError(distance, realDistance, count)
+                            val distanceError = Errors.distanceError(distance, realDistance)
+                            val approxRatio = Errors.approximationRatio(distance, realDistance)
 
-                        (indexError, distanceErrorNorm, distanceError, approxRatio)
-                    } else {
-                        // Se asume error máximo
-                        val indexError = Errors.localIndexError(index, maxIndex, maxIndex)
-                        val distanceErrorNorm = Errors.localDistanceError(distance, maxDistance, count)
-                        val distanceError = Errors.distanceError(distance, maxDistance)
-                        val approxRatio = Errors.approximationRatio(distance, maxDistance)
+                            (indexError, distanceErrorNorm, distanceError, approxRatio)
+                        } else {
+                            // Se asume error máximo
+                            val indexError = Errors.localIndexError(index, maxIndex, maxIndex)
+                            val distanceErrorNorm = Errors.localDistanceError(distance, maxDistance, count)
+                            val distanceError = Errors.distanceError(distance, maxDistance)
+                            val approxRatio = Errors.approximationRatio(distance, maxDistance)
 
-                        (indexError, distanceErrorNorm, distanceError, approxRatio)
+                            (indexError, distanceErrorNorm, distanceError, approxRatio)
+                        }
                     }
-                }
-                }
+                    }
 
                 // Se calcula la suma de todos los errores...
                 val (sumIndexError: Double, sumDistanceErrorNorm: Double, sumDistanceError: Double, sumApproxRatio: Double, size: Int) = errors
@@ -268,45 +293,26 @@ object TestingUtils {
                 // .. y su media
                 val (avgIndexError, avgDistanceErrorNorm, avgDistanceError, avgApproxRatio) = (sumIndexError / size, sumDistanceErrorNorm / size, sumDistanceError / size, sumApproxRatio / size)
 
-                // Se calcula la precisión
-                val set = realResult
-                var sum = 0.0
-                var c = 0.0
-                (1 to k).foreach(i => {
-                    val index = i - 1
-
-                    if (index < approx.length && set.contains(approx(index))) {
-                        c += 1
-                    }
-                    sum += c / i.toDouble
-                })
-                val avgPrecision = sum / k.toDouble
+                // Se calcula el ratio de aproximación
+                val realDistances = realResult
+                    .map(groundId => distanceEvaluator.distance(queryPoint, lookupProvider.lookup(groundId)))
+                val approxDistances = approx
+                    .map(groundId => distanceEvaluator.distance(queryPoint, lookupProvider.lookup(groundId)))
+                val c = Errors.evaluateApproximateRatio(k, approxDistances, realDistances)
 
                 // Se calcula el recall
-                //val calculated = approx.toSet
-                val intersection = realResult.toSet & approx.toSet
-                val recall = intersection.size.toDouble / k.toDouble
+                val recall = Errors.evaluateRecall(k, approx, realResult)
 
-                val apk = (1 / k.toDouble) * (1 to k).map((i: Int) => {
-                    if (i < approx.length && realResult.contains(approx(i))) {
-                        val intersection_i = realResult.toSet & approx.take(i).toSet
-                        val recall_i = intersection_i.size.toDouble / i.toDouble
-                        recall_i
-                    } else {
-                        0
-                    }
-                }).sum
-
-                //(avgIndexError, avgDistanceErrorNorm, avgDistanceError, avgPrecision, recall)
+                // Se calcula la precisión
+                val apk = Errors.evaluateAPK(k, approx, realResult)
 
                 val statistics = new QualityStatistics
                 statistics.avgIndexError = avgIndexError
                 statistics.avgDistanceErrorNorm = avgDistanceErrorNorm
                 statistics.avgDistanceError = avgDistanceError
-                statistics.avgPrecision = avgPrecision
+                statistics.approxRatio = c
                 statistics.recall = recall
-                statistics.apk = apk
-                //statistics.avgApproxRatio = avgApproxRatio
+                statistics.avgPrecision = apk
                 statistics
             }
             }

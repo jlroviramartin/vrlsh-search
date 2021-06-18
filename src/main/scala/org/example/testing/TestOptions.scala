@@ -78,7 +78,6 @@ class TestOptions(var datasets: Array[String] = Array("corel", "shape", "audio")
 
     def loadTestFileWithId(sc: SparkContext, name: String): Array[(Long, Vector)] = {
         cacheTest2.getOrElseUpdate(name, {
-
             var fileName = getTestFilePath(name).toString
 
             if (trainRatio > 0) {

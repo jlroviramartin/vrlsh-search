@@ -10,7 +10,7 @@ class QualityStatistics extends Serializable {
     var avgIndexError: Double = 0
     var avgDistanceErrorNorm: Double = 0
     var avgDistanceError: Double = 0
-    var avgPrecision: Double = 0
+    var approxRatio: Double = 0
     var recall: Double = 0
-    var apk: Double = 0
+    var avgPrecision: Double = 0
 }
