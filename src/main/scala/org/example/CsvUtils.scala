@@ -31,10 +31,9 @@ object CsvUtils {
             val csvWriter = new CsvWriter(outputDirectory.resolve("result.csv").toFile, StandardCharsets.UTF_8, settings)
 
             var index = 0
-
             result.foreach { case (id, approx) => {
                 if (index % 100 == 0) {
-                    println(s"> Procesando $index")
+                    //println(s"> Procesando $index")
                     csvWriter.flush()
                 }
                 index = index + 1
@@ -44,7 +43,6 @@ object CsvUtils {
                     (approx.length until k).map(i => Long.box(-1))
 
                 csvWriter.writeRow(row: _*)
-
                 //csvWriter.writeRow(id, approx)
             }
             }
@@ -70,12 +68,10 @@ object CsvUtils {
         val csvWriter = new CsvWriter(file.toFile, StandardCharsets.UTF_8, settings)
 
         var index = 0
-
-        // Knn real
         result
             .foreach { case (queryId, array) => {
                 if (index % 100 == 0) {
-                    println(s"> Procesando $index")
+                    //println(s"> Procesando $index")
                     csvWriter.flush()
                 }
                 index = index + 1
@@ -107,7 +103,7 @@ object CsvUtils {
         result
             .foreach { case (id, maxDistance) => {
                 if (index % 100 == 0) {
-                    println(s"> Procesando $index")
+                    //println(s"> Procesando $index")
                     csvWriter.flush()
                 }
                 index = index + 1
@@ -138,7 +134,7 @@ object CsvUtils {
         data
             .foreach(statistics => {
                 if (index % 100 == 0) {
-                    println(s"> Procesando $index")
+                    //println(s"> Procesando $index")
                     csvWriter.flush()
                 }
                 index = index + 1
@@ -189,7 +185,7 @@ object CsvUtils {
         data
             .foreach(statistics => {
                 if (index % 100 == 0) {
-                    println(s"> Procesando $index")
+                    //println(s"> Procesando $index")
                     csvWriter.flush()
                 }
                 index = index + 1
@@ -229,7 +225,7 @@ object CsvUtils {
 
             result.foreach { case (name, t, k, desiredSize, constructionTime, queryTime) => {
                 if (index % 100 == 0) {
-                    println(s"> Procesando $index")
+                    //println(s"> Procesando $index")
                     csvWriter.flush()
                 }
                 index = index + 1

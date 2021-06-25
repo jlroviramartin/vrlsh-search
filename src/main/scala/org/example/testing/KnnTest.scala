@@ -26,13 +26,10 @@ object KnnTest {
         val sc = data.sparkContext
 
         println(f"Min of axes: ${envelope.sizes.min}%1.5f")
-        println()
 
         println(f"Max of axes: ${envelope.sizes.max}%1.5f")
-        println()
 
         println(f"Max distance approx.: ${envelope.maxDistance}%1.5f")
-        println()
 
         val count = data.count()
         val maxDistance = envelope.maxDistance
@@ -49,7 +46,6 @@ object KnnTest {
         val factorOutside = 0.5
 
         println("## Exact points")
-        println()
 
         val exactQueries = data.takeSample(withReplacement = false, testExact, RANDOM_SEED).map(x => x._2)
         val exactStatistics = new DefaultStatisticsCollector()
@@ -58,7 +54,6 @@ object KnnTest {
         exactErrorCollector.showAverageOfErrors()
 
         println("## Inside points")
-        println()
 
         // Se calculan n puntos aleatorios dentro del recubrimiento
         val insideQueries = randomInside(envelope, testInside)
@@ -68,7 +63,6 @@ object KnnTest {
         insideErrorCollector.showAverageOfErrors()
 
         println("## Outside points")
-        println()
 
         // Se calculan n puntos aleatorios dentro del recubrimiento
         val outsideQueries = randomOutside(envelope, factorOutside, testOutside)

@@ -48,7 +48,6 @@ class DefaultErrorCollector(val count: Long,
 
                     println(f"| $distance | $id | $index | $realIndex | $indexError%1.5f | $distanceError%1.5f | $distanceErrorNorm%1.5f |")
                 }
-            println()
         }
 
         // Se calculan los errores para cada punto
@@ -83,10 +82,8 @@ class DefaultErrorCollector(val count: Long,
         //val avgDistanceError = (errors.map { case (_, distanceError) => distanceError }.sum) / size
 
         //println(f"Index error avg.: $avgIndexError%1.5f")
-        //println()
 
         //println(f"Distance error avg.: $avgDistanceError%1.5f")
-        //println()
 
         this.errors = this.errors :+ (avgIndexError, avgDistanceError, avgDistanceErrorNorm, errors.size, recall, apk)
     }
@@ -97,7 +94,6 @@ class DefaultErrorCollector(val count: Long,
             println(f"$avgIndexError%1.5f | $avgDistanceError%1.5f | $avgDistanceErrorNorm%1.5f | $size | $recall | $apk")
         }
         }
-        println()
     }
 
     def showAverageOfErrors(): Unit = {
@@ -122,31 +118,23 @@ class DefaultErrorCollector(val count: Long,
         val numberOfFailures = errors.count { case (_, _, _, _, length, _) => length == 0 }
 
         println(f"Index error avg.: $avgIndexError%1.5f")
-        println()
 
         println(f"Distance error avg.: $avgDistanceError%1.5f")
-        println()
 
         println(f"Distance error norm. avg.: $avgDistanceErrorNorm%1.5f")
-        println()
 
         println(f"Recall avg.: $avgRecall%1.5f")
-        println()
 
         println(f"Apk avg.: $avgApk%1.5f")
-        println()
 
         println(f"Size avg.: $avgSize%1.5f")
-        println()
 
         if (numberOfSemiFailures > 0) {
             println(s"No existe solución completa: $numberOfSemiFailures")
-            println()
         }
 
         if (numberOfFailures > 0) {
             println(s"No existe NINGUNA solución: $numberOfFailures")
-            println()
         }
     }
 

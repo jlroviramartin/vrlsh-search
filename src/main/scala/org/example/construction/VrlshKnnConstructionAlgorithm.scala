@@ -7,7 +7,8 @@ import org.example.Utils.time
 import org.example.evaluators.{EuclideanHasher, Hash, HasherFactory}
 import org.apache.spark.SparkContext
 import Utils._
-import org.example.statistics.{GeneralStatistics, EvaluationStatistics, StatisticsCollector}
+import org.apache.spark.storage.StorageLevel
+import org.example.statistics.{EvaluationStatistics, GeneralStatistics, StatisticsCollector}
 
 import java.nio.file.{Path, Paths}
 import scala.collection.immutable.Iterable
@@ -20,7 +21,12 @@ class VrlshKnnConstructionAlgorithm(val hasherFactory: HasherFactory,
 
     val min: Double = desiredSize * Utils.MIN_TOLERANCE
     val max: Double = desiredSize * Utils.MAX_TOLERANCE
-    val radiusMultiplier: Double = 1.4
+
+    val radiusMultiplier: Double = VrlshKnnConstructionAlgorithm.defaultRadiusMultiplier
+
+    val maxIterations = VrlshKnnConstructionAlgorithm.defaultMaxIterations
+    val minLevels: Int = VrlshKnnConstructionAlgorithm.defaultMinLevels
+    val minBuckets: Int = VrlshKnnConstructionAlgorithm.defaultMinBuckets
 
     override def build(data: RDD[(Long, Vector)]): VrlshKnnQuery = {
 
@@ -34,8 +40,6 @@ class VrlshKnnConstructionAlgorithm(val hasherFactory: HasherFactory,
         val (hasher, hashOptions, radius) = hasherFactory.getHasherForDataset(data, dimension, desiredSize)
 
         var currentHasher = hasher
-        //var currentHasher = hashOptions.newHasher()
-        //var bcurrentHasher = sc.broadcast(currentHasher)
 
         println("Inicio broadcast")
 
@@ -43,12 +47,9 @@ class VrlshKnnConstructionAlgorithm(val hasherFactory: HasherFactory,
 
         println("Fin broadcast")
 
-        var currentIndices = data.map { case (id, _) => id }
-        /*----- .cache()*/
+        var currentIndices = data.map { case (id, _) => (id, 0) }
         var currentRadius = radius
         var iteration = 0
-
-        val maxIterations = 100
 
         // Resultado
         var result: RDD[(Double, Hash, List[Long])] = sc.emptyRDD
@@ -70,22 +71,20 @@ class VrlshKnnConstructionAlgorithm(val hasherFactory: HasherFactory,
             val savedRadius = currentRadius
 
             val savedHasher = currentHasher
-            //val bsavedHasher = bcurrentHasher
 
             println("--- evaluate and persist currentData ---")
 
             val currentData = currentIndices
-                .flatMap(id => savedHasher.hash(lookupProvider.lookup(id), savedRadius).map(hash => (hash, id)))
-            /*----- .cache()*/
+                .flatMap { case (id, _) => savedHasher.hash(lookupProvider.lookup(id), savedRadius).map(hash => (hash, id)) }
 
-            if (forAll(currentData) { case (hash, _) => isBaseHashPoint(hash) }) {
+            /*if (forAll(currentData) { case (hash, _) => isBaseHashPoint(hash) }) {
                 println("    ===== Todos son BASE =====")
 
                 ////////////////////////////////////////////////////////////////////////////////////////////////////
                 // En la iteración actual TODOS forman buckets
                 // -----> bucketCondition = _ => true
                 ////////////////////////////////////////////////////////////////////////////////////////////////////
-            }
+            }*/
 
             ////////////////////////////////////////////////////////////////////////////////////////////////////////
             var isLast = false
@@ -107,14 +106,6 @@ class VrlshKnnConstructionAlgorithm(val hasherFactory: HasherFactory,
                 .aggregateByKey(0)(
                     { case (numPoints, _) => numPoints + 1 },
                     (numPoints1, numPoints2) => numPoints1 + numPoints2)
-                .cache()
-
-            // Se muestran estadísticas: cuantos buckets tienen un cierto número de puntos
-            //showStatistics(hashWithNumPoints, bucketCondition)
-            //if (isLast) {
-            //    showStatistics(hashWithNumPoints, bucketCondition)
-            //}
-            //showBucketCount(hashWithNumPoints, bucketCondition)
 
             println("Se calculan los datos que se van a usar para los buckets")
 
@@ -123,20 +114,10 @@ class VrlshKnnConstructionAlgorithm(val hasherFactory: HasherFactory,
                 .subtractByKey(
                     hashWithNumPoints.filter { case (_, numPoints) => !savedBucketCondition(numPoints) }
                 )
-            /*----- .cache()*/
 
             println("dataForBuckets.isEmpty")
 
             if (!dataForBuckets.isEmpty()) {
-                // Se muestran los envelopes
-                //println("    Envelopes");
-                //showEnvelopes(dataForBuckets, lookupProvider)
-
-                println("Se calcula el tamaño mínimo/máximo de los envelopes")
-
-                // Se calcula el tamaño mínimo/máximo de los envelopes
-                //----- showMinMaxEnvelope(dataForBuckets, lookupProvider)
-
                 println("Se actualiza el resultado")
 
                 // Se actualiza el resultado
@@ -150,13 +131,29 @@ class VrlshKnnConstructionAlgorithm(val hasherFactory: HasherFactory,
 
                 println("Se calculan los nuevos índices")
 
-                println("--- evaluate and persist currentIndices ---")
-
                 // Se calculan los nuevos índices
                 val usedIndices = dataForBuckets
                     .map { case (_, id) => id }
-                currentIndices = currentIndices.subtract(usedIndices)
-                    .cache()
+
+                // Se eliminan aquellos que se hayan usado un número mínimo de veces
+                if (minLevels > 0) {
+                    val _minLevels: Int = minLevels
+                    currentIndices = usedIndices
+                        .distinct() // <-----
+                        .map(id => (id, 1))
+                        .union(currentIndices)
+                        .reduceByKey((count1, count2) => count1 + count2)
+                        .filter { case (_, count) => count < _minLevels }
+                        .persist(StorageLevel.MEMORY_AND_DISK)
+                } else {
+                    val _minBuckets: Int = minBuckets
+                    currentIndices = usedIndices
+                        .map(id => (id, 1))
+                        .union(currentIndices)
+                        .reduceByKey((count1, count2) => count1 + count2)
+                        .filter { case (_, count) => count < _minBuckets }
+                        .persist(StorageLevel.MEMORY_AND_DISK)
+                }
 
                 count = currentIndices.count()
             }
@@ -167,17 +164,11 @@ class VrlshKnnConstructionAlgorithm(val hasherFactory: HasherFactory,
             currentRadius = currentRadius * radiusMultiplier
 
             // Se crea un nuevo hasher
-            //println("  Se crea un nuevo hasher")
             currentHasher = hashOptions.newHasher()
-            //if (bcurrentHasher != null) {
-            //    bcurrentHasher.destroy()
-            //}
-            //bcurrentHasher = sc.broadcast(currentHasher)
 
             iteration = iteration + 1
 
             println("--------------------------------------------------")
-
         }
 
         println("Se finaliza!")
@@ -193,7 +184,7 @@ class VrlshKnnConstructionAlgorithm(val hasherFactory: HasherFactory,
         data.saveAsObjectFile(dataFile)
         result.saveAsObjectFile(modelFile)
 
-        new VrlshKnnQuery(baseDirectory, result, hasherMap, lookupProvider)
+        new VrlshKnnQuery(result, hasherMap, lookupProvider)
     }
 
     def time_build(data: RDD[(Long, Vector)]): Unit = {
@@ -207,12 +198,10 @@ class VrlshKnnConstructionAlgorithm(val hasherFactory: HasherFactory,
 
         var currentHasher = hasher
         val lookupProvider = new BroadcastLookupProvider(data)
-        var currentIndices = data.map { case (id, _) => id }
-        /*----- .cache()*/
+
+        var currentIndices = data.map { case (id, _) => (id, 0) }
         var currentRadius = radius
         var iteration = 0
-
-        val maxIterations = 100
 
         // Resultado
         var result: RDD[(Double, Hash, List[Long])] = sc.emptyRDD
@@ -233,15 +222,7 @@ class VrlshKnnConstructionAlgorithm(val hasherFactory: HasherFactory,
             val savedHasher = currentHasher
 
             val currentData = currentIndices
-                .flatMap(id => savedHasher.hash(lookupProvider.lookup(id), savedRadius).map(hash => (hash, id)))
-            /*----- .cache()*/
-
-            if (forAll(currentData) { case (hash, _) => isBaseHashPoint(hash) }) {
-                ////////////////////////////////////////////////////////////////////////////////////////////////////
-                // En la iteración actual TODOS forman buckets
-                // -----> bucketCondition = _ => true
-                ////////////////////////////////////////////////////////////////////////////////////////////////////
-            }
+                .flatMap { case (id, _) => savedHasher.hash(lookupProvider.lookup(id), savedRadius).map(hash => (hash, id)) }
 
             ////////////////////////////////////////////////////////////////////////////////////////////////////////
             var isLast = false
@@ -268,7 +249,6 @@ class VrlshKnnConstructionAlgorithm(val hasherFactory: HasherFactory,
                 .subtractByKey(
                     hashWithNumPoints.filter { case (_, numPoints) => !savedBucketCondition(numPoints) }
                 )
-            /*----- .cache()*/
 
             if (!dataForBuckets.isEmpty()) {
                 // Se actualiza el resultado
@@ -283,8 +263,26 @@ class VrlshKnnConstructionAlgorithm(val hasherFactory: HasherFactory,
                 // Se calculan los nuevos índices
                 val usedIndices = dataForBuckets
                     .map { case (_, id) => id }
-                currentIndices = currentIndices.subtract(usedIndices)
-                    .cache()
+
+                // Se eliminan aquellos que se hayan usado un número mínimo de veces
+                if (minLevels > 0) {
+                    val _minLevels: Int = minLevels
+                    currentIndices = usedIndices
+                        .distinct() // <-----
+                        .map(id => (id, 1))
+                        .union(currentIndices)
+                        .reduceByKey((count1, count2) => count1 + count2)
+                        .filter { case (_, count) => count < _minLevels }
+                        .persist(StorageLevel.MEMORY_AND_DISK)
+                } else {
+                    val _minBuckets: Int = minBuckets
+                    currentIndices = usedIndices
+                        .map(id => (id, 1))
+                        .union(currentIndices)
+                        .reduceByKey((count1, count2) => count1 + count2)
+                        .filter { case (_, count) => count < _minBuckets }
+                        .persist(StorageLevel.MEMORY_AND_DISK)
+                }
 
                 count = currentIndices.count()
             }
@@ -346,6 +344,18 @@ class VrlshKnnConstructionAlgorithm(val hasherFactory: HasherFactory,
 }
 
 object VrlshKnnConstructionAlgorithm {
+
+    var defaultRadiusMultiplier = 1.4
+    var defaultMaxIterations = 200 // 100
+
+    // Indica cual es el número mínimo de niveles en que tiene que estar un punto.
+    // Solo puede estar activo defaultMinLevels o defaultMinBuckets.
+    var defaultMinLevels = 0
+
+    // Indica cual es el número mínimo de buckets en que tiene que estar un punto
+    // Solo puede estar activo defaultMinLevels o defaultMinBuckets.
+    var defaultMinBuckets = 1
+
     def createAndStore(data: RDD[(Long, Vector)],
                        hasherFactory: HasherFactory,
                        desiredSize: Int,
@@ -367,17 +377,15 @@ object VrlshKnnConstructionAlgorithm {
         new VrlshKnnConstructionAlgorithm(hasherFactory, desiredSize, baseDirectory.toString).time_build(data)
     }
 
-    def load(sc: SparkContext,
-             baseDirectory: Path): VrlshKnnQuery = {
+    def load(sc: SparkContext, baseDirectory: Path): VrlshKnnQuery = {
         val knnQuery = DataStore.kload(
             baseDirectory.resolve("KnnQuery.dat"),
-            classOf[VrlshKnnQuerySerializator]).get(sc)
+            classOf[VrlshKnnQuerySerializator]).get(baseDirectory.toString, sc)
         knnQuery
     }
 }
 
-class VrlshKnnQuery(val baseDirectory: String,
-                    val hasherMap: KnnMetadata,
+class VrlshKnnQuery(val hasherMap: KnnMetadata,
                     val lookupProvider: BroadcastLookupProvider)
     extends KnnQuery {
 
@@ -391,11 +399,10 @@ class VrlshKnnQuery(val baseDirectory: String,
         }
     }
 
-    def this(baseDirectory: String,
-             result: RDD[(Double, Hash, List[Long])],
+    def this(result: RDD[(Double, Hash, List[Long])],
              hasherMap: KnnMetadata,
              lookupProvider: BroadcastLookupProvider) = {
-        this(baseDirectory, hasherMap, lookupProvider)
+        this(hasherMap, lookupProvider)
 
         mapRadiusHashToPoints = result.map { case (radius, hash, points) => (radius, (hash, points.toArray)) }
             .groupByKey()
@@ -422,6 +429,9 @@ class VrlshKnnQuery(val baseDirectory: String,
         // Número de niveles recorridos
         var numLevels = 0
 
+        // Número de niveles visitados
+        var numLevelsVisited = 0
+
         val breakableLoop = new Breaks()
         breakableLoop.breakable {
             for (radius <- this.radiuses) {
@@ -429,7 +439,7 @@ class VrlshKnnQuery(val baseDirectory: String,
                 numLevels = numLevels + 1
 
                 // Evaluate remaining points
-                val kremaining = k - knnResult.size
+                /*val kremaining = k - knnResult.size
                 val knnPartialResult = hasherMap
                     .getHasher(radius).get
                     .hash(query, radius)
@@ -442,10 +452,28 @@ class VrlshKnnQuery(val baseDirectory: String,
                 if (knnPartialResult.size > 0) {
                     radiusesInResult = radiusesInResult :+ radius
                     knnResult = KnnResult.combOp(k)(knnResult, knnPartialResult)
+                }*/
+
+                val prevBuckets = knnResult.buckets
+
+                val knnPartialResult = hasherMap
+                    .getHasher(radius).get
+                    .hash(query, radius)
+                    .map(hash => find(radius, hash).map(id => (distanceEvaluator.distance(query, lookupProvider.lookup(id)), id)))
+                    .aggregate(new KnnResult())(
+                        KnnResult.seqOpOfArray(k),
+                        KnnResult.combOp(k))
+                knnResult = KnnResult.combOp(k)(knnResult, knnPartialResult)
+
+                // Indica si se ha encontrado al menos un bucket
+                val foundBucket = (knnResult.buckets - prevBuckets) > 0
+                if (foundBucket) {
+                    radiusesInResult = radiusesInResult :+ radius
+                    numLevelsVisited = numLevelsVisited + 1
                 }
 
                 // Found enough points
-                if (knnResult.size == k) {
+                if (numLevelsVisited >= VrlshKnnQuery.searchInLevels && knnResult.size == k) {
                     breakableLoop.break
                 }
             }
@@ -488,7 +516,6 @@ class VrlshKnnQuery(val baseDirectory: String,
 
         statistics
     }
-
 
     def printResume(): Unit = {
         // Todos los hashers son iguales
@@ -562,15 +589,18 @@ class VrlshKnnQuery(val baseDirectory: String,
     }
 }
 
-class VrlshKnnQuerySerializator(var baseDirectory: String,
-                                var hasherMap: KnnMetadata)
+object VrlshKnnQuery {
+    var searchInLevels: Integer = 1;
+}
+
+class VrlshKnnQuerySerializator(var hasherMap: KnnMetadata)
     extends KnnQuerySerializable {
 
-    def this() = this(null, null)
+    def this() = this(new KnnMetadata())
 
-    def this(query: VrlshKnnQuery) = this(query.baseDirectory, query.hasherMap)
+    def this(query: VrlshKnnQuery) = this(query.hasherMap)
 
-    def get(sc: SparkContext): VrlshKnnQuery = {
+    def get(baseDirectory: String, sc: SparkContext): VrlshKnnQuery = {
         val dataFile = Paths.get(baseDirectory, "data").toString
         val modelFile = Paths.get(baseDirectory, "model").toString
 
@@ -579,6 +609,6 @@ class VrlshKnnQuerySerializator(var baseDirectory: String,
 
         val lookupProvider = new BroadcastLookupProvider(data)
 
-        new VrlshKnnQuery(baseDirectory, result, hasherMap, lookupProvider)
+        new VrlshKnnQuery(result, hasherMap, lookupProvider)
     }
 }

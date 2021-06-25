@@ -4,7 +4,10 @@ class EvaluationStatistics(val size: Int,
                            val comparisons: Int,
                            val buckets: Int,
                            val numLevels: Int,
-                           val radiuses: List[Double]) extends StatisticsCollector.Row with Serializable {
+                           val radiuses: List[Double],
+                           var dataset: String = "",
+                           var t: Int = 0,
+                           var k: Int = 0) extends StatisticsCollector.Row with Serializable {
 
     def headers(): Seq[String] = List("size", "comparisons", "buckets", "numLevels")
 

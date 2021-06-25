@@ -24,7 +24,7 @@ object VrlshApp {
     val GROUND_TRUTH_SIZE = 1000
 
     def main(args: Array[String]) {
-        val spark = SparkUtils.initSpark("3")
+        val spark = SparkUtils.initSpark("*")
 
         //val fos = new FileOutputStream(new File("C:/Temp/log.txt"))
 
@@ -45,7 +45,7 @@ object VrlshApp {
         testOptions.ts = Array(5, 10, 20, 40, 80)
         testOptions.ks = Array(100)*/
 
-        testOptions.datasets = Array(/*"siftsmall", "corel", "shape", "audio",*/ "sift")
+        testOptions.datasets = Array(/*"siftsmall",*/ "corel", "shape", "audio", "sift")
         testOptions.dataFilePath = immutable.Map(
             "corel" -> Paths.get("C:\\datasets\\corel\\corel_random_652317.csv"),
             "shape" -> Paths.get("C:\\datasets\\shape\\shape_random_27775.csv"),
@@ -60,61 +60,609 @@ object VrlshApp {
             "sift" -> Paths.get("C:\\datasets\\sift\\sift_base_random_10000.csv"))
         testOptions.ts = Array(5, 10, 20, 40, 80)
         testOptions.ks = Array(100)
-        //testOptions.samples = 1000
+        testOptions.samples = 1000
 
-        val DIRECTORY = "C:/result/vrlsh-6"
+        val DATASET_PATH = "C:/datasets"
 
-        time(spark, testOptions, DIRECTORY)
-
-        // Se guardan los hashers: dataset -> DIRECTORY/<name>/<desiredSize>/hasher.dat
+        // Se guardan las máximas distancias: testset -> DATASET_PATH/max-distances/<name>/max-distances.csv
         /*{
-            println("=====> storeAllHashers =====")
+            SparkUtils.updateCores(spark, "*")
+            maxDistances(spark, testOptions,
+                s"DATASET_PATH/max-distances)
+        }*/
+
+        // Se guardan los resultados reales: testset -> DATASET_PATH/groundtruth/<name>/<size>/groundtruth.csv
+        /*{
+            SparkUtils.updateCores(spark, "*")
+            groundTruthAll(spark, testOptions,
+                GROUND_TRUTH_SIZE,
+                s"DATASET_PATH/groundtruth")
+        }*/
+
+        // Se guardan los hashers: dataset -> DATASET_PATH/hashers/<name>/<desiredSize>/hasher.dat
+        /*{
             SparkUtils.updateCores(spark, "3")
-            storeAllHashers(spark, testOptions, DIRECTORY)
+            storeAllHashers(spark, testOptions,
+                s"DATASET_PATH/hashers")
         }*/
 
-        // Se guardan los resultados: dataset -> DIRECTORY/<name>/<desiredSize>/KnnQuery.dat
-        //                                       DIRECTORY/<name>/<desiredSize>/data/
-        //                                       DIRECTORY/<name>/<desiredSize>/model/
-        /*{
-            println("=====> storeAll =====")
-            SparkUtils.updateCores(spark, "3")
-            storeAll(spark, testOptions, DIRECTORY)
-        }*/
+        // ===== INICIO =====
 
-        //printVrlsh(spark, testOptions, DIRECTORY)
+        //prepareComparisonPerLevel(spark, testOptions, "C:/result/vrlsh-11", 1)
+        //prepareComparisonPerLevel(spark, testOptions, "C:/result/vrlsh-11", 2)
 
-        // Se guardan las máximas distancias: testset -> DIRECTORY/<name>/max-distances.csv
-        /*{
-            println("=====> maxDistances =====")
-            SparkUtils.updateCores(spark, "*")
-            maxDistances(spark, testOptions, DIRECTORY)
-        }*/
+        //evaluateComparisonPerLevel(spark, testOptions, "C:/result/vrlsh-11", 1, 1)
+        //evaluateComparisonPerLevel(spark, testOptions, "C:/result/vrlsh-11", 1, 2)
+        //evaluateComparisonPerLevel(spark, testOptions, "C:/result/vrlsh-11", 1, 5)
+        //evaluateComparisonPerLevel(spark, testOptions, "C:/result/vrlsh-11", 1, 10)
 
-        // Se guardan los resultados reales: testset -> DIRECTORY/groundtruth/<name>/<size>/groundtruth.csv
-        /*{
-            println("=====> groundTruthAll =====")
-            SparkUtils.updateCores(spark, "*")
-            groundTruthAll(spark, testOptions, s"$DIRECTORY/groundtruth", GROUND_TRUTH_SIZE)
-        }*/
+        //evaluateComparisonPerLevel(spark, testOptions, "C:/result/vrlsh-11", 2, 1)
+        //evaluateComparisonPerLevel(spark, testOptions, "C:/result/vrlsh-11", 2, 2)
+        //evaluateComparisonPerLevel(spark, testOptions, "C:/result/vrlsh-11", 2, 5)
+        //evaluateComparisonPerLevel(spark, testOptions, "C:/result/vrlsh-11", 2, 10)
 
-        // Se evaluan los knn: testset -> DIRECTORY/result/<name>/<k>/result.csv
-        //                                DIRECTORY/result/<name>/<k>/statistics.csv
-        {
-            println("=====> evaluations =====")
-            SparkUtils.updateCores(spark, "*")
-            evaluations(spark, testOptions, DIRECTORY)
-        }
+        //evaluateErrorComparisonPerLevel(spark, testOptions, "C:/result/vrlsh-11", 1, 1)
+        //evaluateErrorComparisonPerLevel(spark, testOptions, "C:/result/vrlsh-11", 1, 2)
+        //evaluateErrorComparisonPerLevel(spark, testOptions, "C:/result/vrlsh-11", 1, 5)
+        //evaluateErrorComparisonPerLevel(spark, testOptions, "C:/result/vrlsh-11", 1, 10)
 
-        // Se evalua el error: testset -> DIRECTORY/statistics/<name>/global-statistics.csv
-        //                                DIRECTORY/statistics/<name>/quality-statistics.csv
-        {
-            println("=====> evaluateError =====")
-            SparkUtils.updateCores(spark, "*")
-            evaluateError(spark, testOptions, DIRECTORY)
-        }
+        //evaluateErrorComparisonPerLevel(spark, testOptions, "C:/result/vrlsh-11", 2, 1)
+        //evaluateErrorComparisonPerLevel(spark, testOptions, "C:/result/vrlsh-11", 2, 2)
+        //evaluateErrorComparisonPerLevel(spark, testOptions, "C:/result/vrlsh-11", 2, 5)
+        //evaluateErrorComparisonPerLevel(spark, testOptions, "C:/result/vrlsh-11", 2, 10)
+
+        //evaluateTimePerLevel(spark, testOptions, "C:/result/vrlsh-11", 1, 1)
+        //evaluateTimePerLevel(spark, testOptions, "C:/result/vrlsh-11", 1, 2)
+        //evaluateTimePerLevel(spark, testOptions, "C:/result/vrlsh-11", 1, 5)
+        //evaluateTimePerLevel(spark, testOptions, "C:/result/vrlsh-11", 1, 10)
+
+        //evaluateTimePerLevel(spark, testOptions, "C:/result/vrlsh-11", 2, 1)
+        //evaluateTimePerLevel(spark, testOptions, "C:/result/vrlsh-11", 2, 2)
+        //evaluateTimePerLevel(spark, testOptions, "C:/result/vrlsh-11", 2, 5)
+        //evaluateTimePerLevel(spark, testOptions, "C:/result/vrlsh-11", 2, 10)
+
+
+
+
+        val RUTA_BASE = "E:/result/vrlsh-13"
+        val minLevels = 5
+
+        println("''''' 1")
+        prepareComparisonPerLevel(spark, testOptions, RUTA_BASE, minLevels)
+/*
+        println("''''' 2")
+        evaluateComparisonPerLevel(spark, testOptions, RUTA_BASE, minLevels, 1)
+        evaluateComparisonPerLevel(spark, testOptions, RUTA_BASE, minLevels, 2)
+        evaluateComparisonPerLevel(spark, testOptions, RUTA_BASE, minLevels, 5)
+        //evaluateComparisonPerLevel(spark, testOptions, RUTA_BASE, minLevels, 10)
+
+        println("''''' 3")
+        evaluateErrorComparisonPerLevel(spark, testOptions, RUTA_BASE, minLevels, 1)
+        evaluateErrorComparisonPerLevel(spark, testOptions, RUTA_BASE, minLevels, 2)
+        evaluateErrorComparisonPerLevel(spark, testOptions, RUTA_BASE, minLevels, 5)
+        //evaluateErrorComparisonPerLevel(spark, testOptions, RUTA_BASE, minLevels, 10)
+
+        println("''''' 4")
+        //evaluateTimePerLevel(spark, testOptions, RUTA_BASE, minLevels, 1)
+        //evaluateTimePerLevel(spark, testOptions, RUTA_BASE, minLevels, 2)
+        //evaluateTimePerLevel(spark, testOptions, RUTA_BASE, minLevels, 5)
+        //evaluateTimePerLevel(spark, testOptions, RUTA_BASE, minLevels, 10)
+*/
+        println("Finaliza: parada spark")
 
         spark.stop()
+    }
+
+    /*
+    def testComparisonPerBucket(spark: SparkSession,
+                                testOptions: TestOptions,
+                                basePath: String,
+                                defaultMinBuckets: Int,
+                                defaultSearchInLevels: Int): Unit = {
+        val DATASET_PATH = "C:/datasets"
+
+        SparkUtils.updateCores(spark, "*")
+
+        ////////////////////////////////////////////////////////////////////////////////////////////
+        // Se construyen las estructuras las mediciones
+
+        // 1 iteración
+
+        {
+            VrlshKnnConstructionAlgorithm.defaultMinBuckets = 1
+            VrlshKnnConstructionAlgorithm.defaultMinLevels = 0
+
+            val minBuckets = VrlshKnnConstructionAlgorithm.defaultMinBuckets
+            val RESULT_PATH = s"$basePath-minBuckets-$minBuckets"
+
+            storeAll(spark, testOptions,
+                s"$DATASET_PATH/hashers",
+                s"$RESULT_PATH")
+        }
+
+        // 30 iteraciones
+
+        {
+            VrlshKnnConstructionAlgorithm.defaultMinBuckets = defaultMinBuckets
+            VrlshKnnConstructionAlgorithm.defaultMinLevels = 0
+
+            val minBuckets = VrlshKnnConstructionAlgorithm.defaultMinBuckets
+            val RESULT_PATH = s"$basePath-minBuckets-$minBuckets"
+
+            storeAll(spark, testOptions,
+                s"$DATASET_PATH/hashers",
+                s"$RESULT_PATH")
+        }
+
+        ////////////////////////////////////////////////////////////////////////////////////////////
+        // Se realizan las mediciones
+
+        // 1 iteración y búsqueda en 1 nivel
+
+        {
+            VrlshKnnConstructionAlgorithm.defaultMinBuckets = 1
+            VrlshKnnConstructionAlgorithm.defaultMinLevels = 0
+            VrlshKnnQuery.searchInLevels = 1
+
+            val minBuckets = VrlshKnnConstructionAlgorithm.defaultMinBuckets
+            val searchInLevels = VrlshKnnQuery.searchInLevels
+            val RESULT_PATH = s"$basePath-minBuckets-$minBuckets"
+
+            evaluate(spark, testOptions,
+                s"$RESULT_PATH",
+                s"$RESULT_PATH-searchInLevels-$searchInLevels/result")
+
+            evaluateRecallAndMap(spark, testOptions,
+                s"$DATASET_PATH/groundtruth",
+                s"$DATASET_PATH/max-distances",
+                s"$RESULT_PATH",
+                s"$RESULT_PATH-searchInLevels-$searchInLevels/result")
+        }
+
+        // 1 iteración y búsqueda en 10 niveles
+
+        {
+            VrlshKnnConstructionAlgorithm.defaultMinBuckets = 1
+            VrlshKnnConstructionAlgorithm.defaultMinLevels = 0
+            VrlshKnnQuery.searchInLevels = defaultSearchInLevels
+
+            val minBuckets = VrlshKnnConstructionAlgorithm.defaultMinBuckets
+            val searchInLevels = VrlshKnnQuery.searchInLevels
+            val RESULT_PATH = s"$basePath-minBuckets-$minBuckets"
+
+            evaluate(spark, testOptions,
+                s"$RESULT_PATH",
+                s"$RESULT_PATH-searchInLevels-$searchInLevels/result")
+
+            evaluateRecallAndMap(spark, testOptions,
+                s"$DATASET_PATH/groundtruth",
+                s"$DATASET_PATH/max-distances",
+                s"$RESULT_PATH",
+                s"$RESULT_PATH-searchInLevels-$searchInLevels/result")
+        }
+
+        // 30 iteraciones y búsqueda en 1 nivel
+
+        {
+            VrlshKnnConstructionAlgorithm.defaultMinBuckets = defaultMinBuckets
+            VrlshKnnConstructionAlgorithm.defaultMinLevels = 0
+            VrlshKnnQuery.searchInLevels = 1
+
+            val minBuckets = VrlshKnnConstructionAlgorithm.defaultMinBuckets
+            val searchInLevels = VrlshKnnQuery.searchInLevels
+            val RESULT_PATH = s"$basePath-minBuckets-$minBuckets"
+
+            evaluate(spark, testOptions,
+                s"$RESULT_PATH",
+                s"$RESULT_PATH-searchInLevels-$searchInLevels/result")
+
+            evaluateRecallAndMap(spark, testOptions,
+                s"$DATASET_PATH/groundtruth",
+                s"$DATASET_PATH/max-distances",
+                s"$RESULT_PATH",
+                s"$RESULT_PATH-searchInLevels-$searchInLevels/result")
+        }
+
+        // 30 iteraciones y búsqueda en 10 niveles
+
+        {
+            VrlshKnnConstructionAlgorithm.defaultMinBuckets = defaultMinBuckets
+            VrlshKnnConstructionAlgorithm.defaultMinLevels = 0
+            VrlshKnnQuery.searchInLevels = defaultSearchInLevels
+
+            val minBuckets = VrlshKnnConstructionAlgorithm.defaultMinBuckets
+            val searchInLevels = VrlshKnnQuery.searchInLevels
+            val RESULT_PATH = s"$basePath-minBuckets-$minBuckets"
+
+            evaluate(spark, testOptions,
+                s"$RESULT_PATH",
+                s"$RESULT_PATH-searchInLevels-$searchInLevels/result")
+
+            evaluateRecallAndMap(spark, testOptions,
+                s"$DATASET_PATH/groundtruth",
+                s"$DATASET_PATH/max-distances",
+                s"$RESULT_PATH",
+                s"$RESULT_PATH-searchInLevels-$searchInLevels/result")
+        }
+    }
+
+    def testComparisonPerLevel(spark: SparkSession,
+                               testOptions: TestOptions,
+                               basePath: String,
+                               defaultMinLevels: Int,
+                               defaultSearchInLevels: Int): Unit = {
+        val DATASET_PATH = "C:/datasets"
+
+        SparkUtils.updateCores(spark, "*")
+
+        ////////////////////////////////////////////////////////////////////////////////////////////
+        // Se construyen las estructuras las mediciones
+
+        // 1 nivel
+
+        {
+            VrlshKnnConstructionAlgorithm.defaultMinBuckets = 0
+            VrlshKnnConstructionAlgorithm.defaultMinLevels = 1
+
+            val minLevels = VrlshKnnConstructionAlgorithm.defaultMinLevels
+            val RESULT_PATH = s"$basePath-minLevels-$minLevels"
+
+            storeAll(spark, testOptions,
+                s"$DATASET_PATH/hashers",
+                s"$RESULT_PATH")
+        }
+
+        // n niveles
+
+        {
+            VrlshKnnConstructionAlgorithm.defaultMinBuckets = 0
+            VrlshKnnConstructionAlgorithm.defaultMinLevels = defaultMinLevels
+
+            val minLevels = VrlshKnnConstructionAlgorithm.defaultMinLevels
+            val RESULT_PATH = s"$basePath-minLevels-$minLevels"
+
+            storeAll(spark, testOptions,
+                s"$DATASET_PATH/hashers",
+                s"$RESULT_PATH")
+        }
+
+        ////////////////////////////////////////////////////////////////////////////////////////////
+        // Se realizan las mediciones
+
+        // 1 iteración y búsqueda en 1 nivel
+
+        {
+            VrlshKnnConstructionAlgorithm.defaultMinBuckets = 0
+            VrlshKnnConstructionAlgorithm.defaultMinLevels = 1
+            VrlshKnnQuery.searchInLevels = 1
+
+            val minLevels = VrlshKnnConstructionAlgorithm.defaultMinLevels
+            val searchInLevels = VrlshKnnQuery.searchInLevels
+            val RESULT_PATH = s"$basePath-minLevels-$minLevels"
+
+            evaluate(spark, testOptions,
+                s"$RESULT_PATH",
+                s"$RESULT_PATH-searchInLevels-$searchInLevels/result")
+
+            println(s"minLevels-$minLevels-searchInLevels-$searchInLevels")
+
+            evaluateRecallAndMap(spark, testOptions,
+                s"$DATASET_PATH/groundtruth",
+                s"$DATASET_PATH/max-distances",
+                s"$RESULT_PATH",
+                s"$RESULT_PATH-searchInLevels-$searchInLevels/result")
+        }
+
+        // 1 iteración y búsqueda en m niveles
+
+        {
+            VrlshKnnConstructionAlgorithm.defaultMinBuckets = 0
+            VrlshKnnConstructionAlgorithm.defaultMinLevels = 1
+            VrlshKnnQuery.searchInLevels = defaultSearchInLevels
+
+            val minLevels = VrlshKnnConstructionAlgorithm.defaultMinLevels
+            val searchInLevels = VrlshKnnQuery.searchInLevels
+            val RESULT_PATH = s"$basePath-minLevels-$minLevels"
+
+            evaluate(spark, testOptions,
+                s"$RESULT_PATH",
+                s"$RESULT_PATH-searchInLevels-$searchInLevels/result")
+
+            println(s"minLevels-$minLevels-searchInLevels-$searchInLevels")
+
+            evaluateRecallAndMap(spark, testOptions,
+                s"$DATASET_PATH/groundtruth",
+                s"$DATASET_PATH/max-distances",
+                s"$RESULT_PATH",
+                s"$RESULT_PATH-searchInLevels-$searchInLevels/result")
+        }
+
+        // n iteraciones y búsqueda en 1 nivel
+
+        {
+            VrlshKnnConstructionAlgorithm.defaultMinBuckets = 0
+            VrlshKnnConstructionAlgorithm.defaultMinLevels = defaultMinLevels
+            VrlshKnnQuery.searchInLevels = 1
+
+            val minLevels = VrlshKnnConstructionAlgorithm.defaultMinLevels
+            val searchInLevels = VrlshKnnQuery.searchInLevels
+            val RESULT_PATH = s"$basePath-minLevels-$minLevels"
+
+            evaluate(spark, testOptions,
+                s"$RESULT_PATH",
+                s"$RESULT_PATH-searchInLevels-$searchInLevels/result")
+
+            println(s"minLevels-$minLevels-searchInLevels-$searchInLevels")
+
+            evaluateRecallAndMap(spark, testOptions,
+                s"$DATASET_PATH/groundtruth",
+                s"$DATASET_PATH/max-distances",
+                s"$RESULT_PATH",
+                s"$RESULT_PATH-searchInLevels-$searchInLevels/result")
+        }
+
+        // n iteraciones y búsqueda en m niveles
+
+        {
+            VrlshKnnConstructionAlgorithm.defaultMinBuckets = 0
+            VrlshKnnConstructionAlgorithm.defaultMinLevels = defaultMinLevels
+            VrlshKnnQuery.searchInLevels = defaultSearchInLevels
+
+            val minLevels = VrlshKnnConstructionAlgorithm.defaultMinLevels
+            val searchInLevels = VrlshKnnQuery.searchInLevels
+            val RESULT_PATH = s"$basePath-minLevels-$minLevels"
+
+            evaluate(spark, testOptions,
+                s"$RESULT_PATH",
+                s"$RESULT_PATH-searchInLevels-$searchInLevels/result")
+
+            println(s"minLevels-$minLevels-searchInLevels-$searchInLevels")
+
+            evaluateRecallAndMap(spark, testOptions,
+                s"$DATASET_PATH/groundtruth",
+                s"$DATASET_PATH/max-distances",
+                s"$RESULT_PATH",
+                s"$RESULT_PATH-searchInLevels-$searchInLevels/result")
+        }
+    }
+
+    def testComparisonPerLevel_v2(spark: SparkSession,
+                                  testOptions: TestOptions,
+                                  basePath: String,
+                                  defaultMinLevels: Int,
+                                  defaultSearchInLevels: Int): Unit = {
+        val DATASET_PATH = "C:/datasets"
+
+        SparkUtils.updateCores(spark, "*")
+
+        ////////////////////////////////////////////////////////////////////////////////////////////
+        // Se realizan las mediciones
+
+        // 1 iteración y búsqueda en 1 nivel
+
+        {
+            VrlshKnnConstructionAlgorithm.defaultMinBuckets = 0
+            VrlshKnnConstructionAlgorithm.defaultMinLevels = 1
+            VrlshKnnQuery.searchInLevels = 1
+
+            val minLevels = VrlshKnnConstructionAlgorithm.defaultMinLevels
+            val searchInLevels = VrlshKnnQuery.searchInLevels
+            val RESULT_PATH = s"$basePath-minLevels-$minLevels"
+
+            println(s"minLevels-$minLevels-searchInLevels-$searchInLevels")
+
+            evaluateError(spark, testOptions,
+                s"$DATASET_PATH/groundtruth",
+                s"$DATASET_PATH/max-distances",
+                s"$RESULT_PATH",
+                s"$RESULT_PATH-searchInLevels-$searchInLevels/result",
+                s"$RESULT_PATH-searchInLevels-$searchInLevels/statistics")
+        }
+
+        // 1 iteración y búsqueda en m niveles
+
+        {
+            VrlshKnnConstructionAlgorithm.defaultMinBuckets = 0
+            VrlshKnnConstructionAlgorithm.defaultMinLevels = 1
+            VrlshKnnQuery.searchInLevels = defaultSearchInLevels
+
+            val minLevels = VrlshKnnConstructionAlgorithm.defaultMinLevels
+            val searchInLevels = VrlshKnnQuery.searchInLevels
+            val RESULT_PATH = s"$basePath-minLevels-$minLevels"
+
+            println(s"minLevels-$minLevels-searchInLevels-$searchInLevels")
+
+            evaluateError(spark, testOptions,
+                s"$DATASET_PATH/groundtruth",
+                s"$DATASET_PATH/max-distances",
+                s"$RESULT_PATH",
+                s"$RESULT_PATH-searchInLevels-$searchInLevels/result",
+                s"$RESULT_PATH-searchInLevels-$searchInLevels/statistics")
+        }
+
+        // n iteraciones y búsqueda en 1 nivel
+
+        {
+            VrlshKnnConstructionAlgorithm.defaultMinBuckets = 0
+            VrlshKnnConstructionAlgorithm.defaultMinLevels = defaultMinLevels
+            VrlshKnnQuery.searchInLevels = 1
+
+            val minLevels = VrlshKnnConstructionAlgorithm.defaultMinLevels
+            val searchInLevels = VrlshKnnQuery.searchInLevels
+            val RESULT_PATH = s"$basePath-minLevels-$minLevels"
+
+            println(s"minLevels-$minLevels-searchInLevels-$searchInLevels")
+
+            evaluateError(spark, testOptions,
+                s"$DATASET_PATH/groundtruth",
+                s"$DATASET_PATH/max-distances",
+                s"$RESULT_PATH",
+                s"$RESULT_PATH-searchInLevels-$searchInLevels/result",
+                s"$RESULT_PATH-searchInLevels-$searchInLevels/statistics")
+        }
+
+        // n iteraciones y búsqueda en m niveles
+
+        {
+            VrlshKnnConstructionAlgorithm.defaultMinBuckets = 0
+            VrlshKnnConstructionAlgorithm.defaultMinLevels = defaultMinLevels
+            VrlshKnnQuery.searchInLevels = defaultSearchInLevels
+
+            val minLevels = VrlshKnnConstructionAlgorithm.defaultMinLevels
+            val searchInLevels = VrlshKnnQuery.searchInLevels
+            val RESULT_PATH = s"$basePath-minLevels-$minLevels"
+
+            println(s"minLevels-$minLevels-searchInLevels-$searchInLevels")
+
+            evaluateError(spark, testOptions,
+                s"$DATASET_PATH/groundtruth",
+                s"$DATASET_PATH/max-distances",
+                s"$RESULT_PATH",
+                s"$RESULT_PATH-searchInLevels-$searchInLevels/result",
+                s"$RESULT_PATH-searchInLevels-$searchInLevels/statistics")
+        }
+    }
+*/
+
+    def prepareComparisonPerLevel(spark: SparkSession,
+                                  testOptions: TestOptions,
+                                  basePath: String,
+                                  minLevels: Int): Unit = {
+        val DATASET_PATH = "C:/datasets"
+
+        SparkUtils.updateCores(spark, "*")
+
+        VrlshKnnConstructionAlgorithm.defaultMinBuckets = 0
+        VrlshKnnConstructionAlgorithm.defaultMinLevels = minLevels
+
+        val RESULT_PATH = s"$basePath-minLevels-$minLevels"
+
+        storeAll(spark, testOptions,
+            s"$DATASET_PATH/hashers",
+            s"$RESULT_PATH")
+    }
+
+    def evaluateComparisonPerLevel(spark: SparkSession,
+                                   testOptions: TestOptions,
+                                   basePath: String,
+                                   minLevels: Int,
+                                   searchInLevels: Int): Unit = {
+        val DATASET_PATH = "C:/datasets"
+
+        SparkUtils.updateCores(spark, "*")
+
+        VrlshKnnConstructionAlgorithm.defaultMinBuckets = 0
+        VrlshKnnConstructionAlgorithm.defaultMinLevels = minLevels
+        VrlshKnnQuery.searchInLevels = searchInLevels
+
+        val RESULT_PATH = s"$basePath-minLevels-$minLevels"
+
+        println(s"minLevels-$minLevels-searchInLevels-$searchInLevels")
+
+        evaluate(spark, testOptions,
+            s"$RESULT_PATH",
+            s"$RESULT_PATH-searchInLevels-$searchInLevels/result")
+
+        //evaluateRecallAndMap(spark, testOptions,
+        //    s"$DATASET_PATH/groundtruth",
+        //    s"$DATASET_PATH/max-distances",
+        //    s"$RESULT_PATH",
+        //    s"$RESULT_PATH-searchInLevels-$searchInLevels/result")
+    }
+
+    def evaluateErrorComparisonPerLevel(spark: SparkSession,
+                                        testOptions: TestOptions,
+                                        basePath: String,
+                                        minLevels: Int,
+                                        searchInLevels: Int): Unit = {
+        val DATASET_PATH = "C:/datasets"
+
+        SparkUtils.updateCores(spark, "*")
+
+        VrlshKnnConstructionAlgorithm.defaultMinBuckets = 0
+        VrlshKnnConstructionAlgorithm.defaultMinLevels = minLevels
+        VrlshKnnQuery.searchInLevels = searchInLevels
+
+        val RESULT_PATH = s"$basePath-minLevels-$minLevels"
+
+        println(s"minLevels-$minLevels-searchInLevels-$searchInLevels")
+
+        evaluateError(spark, testOptions,
+            s"$DATASET_PATH/groundtruth",
+            s"$DATASET_PATH/max-distances",
+            s"$RESULT_PATH",
+            s"$RESULT_PATH-searchInLevels-$searchInLevels/result",
+            s"$RESULT_PATH-searchInLevels-$searchInLevels/statistics")
+
+        //time(spark,
+        //    testOptions,
+        //    s"$DATASET_PATH/hashers",
+        //    s"$RESULT_PATH",
+        //    s"$RESULT_PATH-searchInLevels-$searchInLevels/statistics")
+    }
+
+    def evaluateTimePerLevel(spark: SparkSession,
+                             testOptions: TestOptions,
+                             basePath: String,
+                             minLevels: Int,
+                             searchInLevels: Int): Unit = {
+        val DATASET_PATH = "C:/datasets"
+
+        SparkUtils.updateCores(spark, "*")
+
+        VrlshKnnConstructionAlgorithm.defaultMinBuckets = 0
+        VrlshKnnConstructionAlgorithm.defaultMinLevels = minLevels
+        VrlshKnnQuery.searchInLevels = searchInLevels
+
+        val RESULT_PATH = s"$basePath-minLevels-$minLevels"
+
+        println(s"minLevels-$minLevels-searchInLevels-$searchInLevels")
+
+        time(spark,
+            testOptions,
+            s"$DATASET_PATH/hashers",
+            s"$RESULT_PATH",
+            s"$RESULT_PATH-searchInLevels-$searchInLevels/statistics")
+    }
+
+    def test1(spark: SparkSession, testOptions: TestOptions, basePath: String): Unit = {
+        val DATASET_PATH = "C:/datasets"
+
+        VrlshKnnConstructionAlgorithm.defaultMinBuckets = 1
+        VrlshKnnConstructionAlgorithm.defaultMinLevels = 0
+        VrlshKnnQuery.searchInLevels = 1
+
+        val minBuckets = VrlshKnnConstructionAlgorithm.defaultMinBuckets
+        val searchInLevels = VrlshKnnQuery.searchInLevels
+        val RESULT_PATH = s"$basePath-minBuckets-$minBuckets"
+
+        SparkUtils.updateCores(spark, "*")
+
+        // Se guardan los resultados: dataset -> RESULT_PATH/<name>/<desiredSize>/KnnQuery.dat
+        //                                       RESULT_PATH/<name>/<desiredSize>/data/
+        //                                       RESULT_PATH/<name>/<desiredSize>/model/
+        storeAll(spark, testOptions,
+            s"$DATASET_PATH/hashers",
+            s"$RESULT_PATH")
+
+        // Se evaluan los knn: testset -> RESULT_PATH/result/<name>/<k>/result.csv
+        //                                RESULT_PATH/result/<name>/<k>/statistics.csv
+        evaluate(spark, testOptions,
+            s"$RESULT_PATH",
+            s"$RESULT_PATH-searchInLevels-$searchInLevels/result")
+
+        // Se evalua el error: testset -> RESULT_PATH/statistics/<name>/global-statistics.csv
+        //                                RESULT_PATH/statistics/<name>/quality-statistics.csv
+        evaluateError(spark, testOptions,
+            s"$DATASET_PATH/groundtruth",
+            s"$DATASET_PATH/max-distances",
+            s"$RESULT_PATH",
+            s"$RESULT_PATH-searchInLevels-$searchInLevels/result",
+            s"$RESULT_PATH-searchInLevels-$searchInLevels/statistics")
+
+        printVrlsh(spark, testOptions, s"$RESULT_PATH")
+
+        //time(spark, testOptions, RESULT_PATH)
     }
 
     def storeAllHashers(spark: SparkSession,
@@ -122,6 +670,7 @@ object VrlshApp {
                         outputPath: String): Unit = {
         val sc = spark.sparkContext
 
+        println("=====> storeAllHashers =====")
         testOptions.datasets.foreach { name =>
             println(s"===== $name =====")
 
@@ -148,9 +697,11 @@ object VrlshApp {
 
     def storeAll(spark: SparkSession,
                  testOptions: TestOptions,
+                 hashersPath: String,
                  outputPath: String): Unit = {
         val sc = spark.sparkContext
 
+        println("=====> storeAll =====")
         testOptions.datasets.foreach { name =>
             println(s"===== $name =====")
 
@@ -168,7 +719,7 @@ object VrlshApp {
                     val baseDirectory = Paths.get(outputPath, s"$name/$desiredSize")
                     Files.createDirectories(baseDirectory)
 
-                    val hasherFactory = new LoadHasherFactory(baseDirectory)
+                    val hasherFactory = new LoadHasherFactory(Paths.get(hashersPath, s"$name/$desiredSize"))
                     VrlshKnnConstructionAlgorithm.createAndStore(data, hasherFactory, desiredSize, baseDirectory)
                 }
             }
@@ -177,10 +728,13 @@ object VrlshApp {
 
     def time(spark: SparkSession,
              testOptions: TestOptions,
+             hashersPath: String,
+             knnQueryPath: String,
              outputPath: String): Unit = {
         val sc = spark.sparkContext
         val distanceEvaluator = new KnnEuclideanSquareDistance
 
+        println("=====> time =====")
         val result = testOptions.datasets.flatMap { name =>
             println(s"===== $name =====")
 
@@ -202,7 +756,7 @@ object VrlshApp {
                     val baseDirectory = Paths.get(outputPath, s"$name/$desiredSize")
 
                     val constructionTime = {
-                        val hasherFactory = new LoadHasherFactory(baseDirectory)
+                        val hasherFactory = new LoadHasherFactory(Paths.get(hashersPath, s"$name/$desiredSize"))
 
                         val begin = System.currentTimeMillis()
                         VrlshKnnConstructionAlgorithm.time_createAndStore(data, hasherFactory, desiredSize, baseDirectory)
@@ -211,7 +765,8 @@ object VrlshApp {
 
                     val queryTime = {
                         // Se construye/deserializa el objeto knnQuery
-                        val knnQuery = VrlshKnnConstructionAlgorithm.load(sc, baseDirectory)
+                        val knnQuery = VrlshKnnConstructionAlgorithm.load(sc,
+                            Paths.get(knnQueryPath, s"$name/$desiredSize"))
 
                         val begin2 = System.currentTimeMillis()
                         time_doQueriesWithResult(knnQuery, distanceEvaluator, k, queries.toList, new DefaultStatisticsCollector())
@@ -224,7 +779,7 @@ object VrlshApp {
         }
 
         val names = testOptions.datasets.reduce((a, b) => a + "_" + b)
-        val outputDirectory = Paths.get(outputPath, s"statistics/$names")
+        val outputDirectory = Paths.get(outputPath, s"$names")
 
         CsvUtils.storeTimeResult(outputDirectory, result.to[immutable.Iterable])
     }
@@ -243,52 +798,39 @@ object VrlshApp {
 
                     val desiredSize = t * k
 
-                    val baseDirectory = Paths.get(outputPath, s"$name/$desiredSize")
-
-                    val knnQuery = VrlshKnnConstructionAlgorithm.load(spark.sparkContext, baseDirectory)
+                    val knnQuery = VrlshKnnConstructionAlgorithm.load(spark.sparkContext,
+                        Paths.get(outputPath, s"$name/$desiredSize"))
                     knnQuery.printResume()
+
+                    println("==================================================")
+                    val numTables = knnQuery.getGeneralStatistics().numTables
+                    println(s"Num. tables: $numTables")
+                    val points = spark.sparkContext.parallelize(
+                        knnQuery.radiuses.flatMap(radius => knnQuery.mapRadiusHashToPoints(radius).toSeq)
+                            .flatMap { case (_, ids) => ids })
+                    val idAndCount = points
+                        .map(id => (id, 1))
+                        .reduceByKey { case (c1, c2) => c1 + c2 }
+
+                    idAndCount
+                        .map { case (id, count) => (count, 1) }
+                        .reduceByKey { case (c1, c2) => c1 + c2 }
+                        .collect()
+                        .sortWith { case ((c1, _), (c2, _)) => c1.compare(c2) < 0 }
+                        .foreach { case (countOfIds, count) => println(s"$countOfIds - $count") }
+
                 }
             }
         }
     }
 
-    /*def storeApproximateResult(spark: SparkSession,
-                               testOptions: TestOptions,
-                               inputPath: String): Unit = {
-        val sc = spark.sparkContext
-
-        testOptions.datasets.foreach { name =>
-            println(s"===== $name =====")
-
-            // Dataset
-            val data = testOptions.loadDataFile(sc, name)
-
-            // Testing data
-            val testing = testOptions.loadTestFile(sc, name)
-
-            testOptions.ts.foreach { t =>
-                println(s"  === $t: ${new Date(System.currentTimeMillis())} =====")
-
-                testOptions.ks.foreach { k =>
-                    println(s"    = $k: ${new Date(System.currentTimeMillis())} =====")
-
-                    val desiredSize = t * k
-
-                    val baseDirectory = Paths.get(inputPath, s"$name/$desiredSize")
-                    Files.createDirectories(baseDirectory)
-
-                    KnnTest.testSet_v2(data, baseDirectory, baseDirectory, testing.to[immutable.Iterable], k)
-                }
-            }
-        }
-    }*/
-
     def groundTruthAll(spark: SparkSession,
                        testOptions: TestOptions,
-                       inputPath: String,
-                       k: Integer): Unit = {
+                       k: Integer,
+                       inputPath: String): Unit = {
         val sc = spark.sparkContext
 
+        println("=====> groundTruthAll =====")
         testOptions.datasets.foreach { name =>
             println(s"===== $name =====")
 
@@ -315,6 +857,7 @@ object VrlshApp {
                      inputPath: String): Unit = {
         val sc = spark.sparkContext
 
+        println("=====> maxDistances =====")
         testOptions.datasets.foreach { name =>
             println(s"===== $name =====")
 
@@ -336,13 +879,17 @@ object VrlshApp {
         }
     }
 
-    def evaluations(spark: SparkSession,
-                    testOptions: TestOptions,
-                    inputPath: String): Unit = {
+    def evaluate(spark: SparkSession,
+                 testOptions: TestOptions,
+                 knnQueryPath: String,
+                 outputPath: String): Unit = {
         val sc = spark.sparkContext
 
+        val _statistics = new DefaultStatisticsCollector()
+
+        println("=====> evaluate =====")
         testOptions.datasets.foreach { name =>
-            println(s"## Dataset $name")
+            println(s"  Dataset $name")
 
             // Dataset
             val data = testOptions.loadDataFile(sc, name)
@@ -356,71 +903,64 @@ object VrlshApp {
                 testOptions.ks.foreach { k =>
                     val desiredSize = t * k
 
-                    val baseDirectory = Paths.get(inputPath, s"$name/$desiredSize")
-                    val outputDirectory = Paths.get(inputPath, s"result/$name/$desiredSize")
+                    // Se construye/deserializa el objeto knnQuery
+                    val knnQuery = VrlshKnnConstructionAlgorithm.load(sc,
+                        Paths.get(knnQueryPath, s"$name/$desiredSize"))
+
+                    val statistics = new DefaultStatisticsCollector()
+
+                    print("==== Evaluating:")
+                    val count = queries.size
+                    val result = doQueriesWithResult(knnQuery, distanceEvaluator, k, queries.toList, statistics)
+                        .zipWithIndex
+                        .map { case (value, index) => {
+                            if (index % 100 == 0) {
+                                print(s"  ${100 * index / count}%")
+                                Console.flush()
+                            }
+                            if (index == (count - 1)) {
+                                println()
+                            }
+
+                            value
+                        }
+                        }
+
+                    val outputDirectory = Paths.get(outputPath, s"$name/$desiredSize")
                     Files.createDirectories(outputDirectory)
 
-                    // Se construye/deserializa el objeto knnQuery
-                    val knnQuery = VrlshKnnConstructionAlgorithm.load(sc, baseDirectory)
+                    statistics.statistics.foreach(v => {
+                        v.dataset = name
+                        v.t = t
+                        v.k = k
+                    })
 
-                    println("==== Evaluating =====")
-
-                    val statistics = new DefaultStatisticsCollector()
-                    val result = doQueriesWithResult(knnQuery, distanceEvaluator, k, queries.toList, statistics)
+                    _statistics.statistics = _statistics.statistics ++ statistics.statistics
 
                     CsvUtils.storeApproximateResult(outputDirectory, result, k)
-                    statistics.csv(outputDirectory.resolve("statistics.csv"))
                 }
             }
         }
+
+        val names = testOptions.datasets.reduce((a, b) => a + "_" + b)
+        val _outputDirectory = Paths.get(outputPath, s"$names")
+
+        _statistics.csv(_outputDirectory.resolve("statistics.csv"))
     }
-
-    /*def time_evaluations(spark: SparkSession,
-                         testOptions: TestOptions,
-                         inputPath: String): Unit = {
-        val sc = spark.sparkContext
-
-        testOptions.datasets.foreach { name =>
-            println(s"## Dataset $name")
-
-            // Dataset
-            val data = testOptions.loadDataFile(sc, name)
-
-            // Testing data
-            val queries = testOptions.loadTestFileWithId(sc, name)
-
-            val distanceEvaluator = new KnnEuclideanSquareDistance
-
-            testOptions.ts.foreach { t =>
-                testOptions.ks.foreach { k =>
-                    val desiredSize = t * k
-
-                    val baseDirectory = Paths.get(inputPath, s"$name/$desiredSize")
-
-                    // Se construye/deserializa el objeto knnQuery
-                    val knnQuery = VrlshKnnConstructionAlgorithm.load(sc, baseDirectory)
-
-                    println("==== Evaluating =====")
-
-                    val statistics = new DefaultStatisticsCollector()
-                    val begin = System.currentTimeMillis()
-                    time_doQueriesWithResult(knnQuery, distanceEvaluator, k, queries.toList, statistics)
-                    val milis = System.currentTimeMillis() - begin
-
-                    println(s"    Evaluation time: ${milis}")
-                }
-            }
-        }
-    }*/
 
     def evaluateError(spark: SparkSession,
                       testOptions: TestOptions,
-                      inputPath: String): Unit = {
+                      groundtruthPath: String,
+                      maxDistancesPath: String,
+                      knnQueryPath: String,
+                      approxPath: String,
+                      outputPath: String): Unit = {
         val sc = spark.sparkContext
 
         val names = testOptions.datasets.reduce((a, b) => a + "_" + b)
-        val outputDirectory = Paths.get(inputPath, s"statistics/$names")
+        val outputDirectory = Paths.get(outputPath, s"$names")
 
+        println("=====> evaluateError =====")
         println("Quality statistics")
 
         val quality = testOptions.datasets.flatMap { name =>
@@ -436,20 +976,19 @@ object VrlshApp {
                 testOptions.ks.flatMap { k =>
                     val desiredSize = t * k
 
+                    val groundTruth = SparkUtils.readGroundTruthFile(sc,
+                        Paths.get(groundtruthPath, s"$name/$GROUND_TRUTH_SIZE/groundtruth.csv"))
+
+                    val maxDistances = SparkUtils.readMaxDistancesFile(sc,
+                        Paths.get(maxDistancesPath, s"$name/max-distances.csv"))
+
+
                     // Se construye/deserializa el objeto knnQuery
-                    val baseDirectory = Paths.get(inputPath, s"$name/$desiredSize")
+                    val knnQuery = VrlshKnnConstructionAlgorithm.load(data.sparkContext,
+                        Paths.get(knnQueryPath, s"$name/$desiredSize"))
 
-                    val knnQuery = VrlshKnnConstructionAlgorithm.load(data.sparkContext, baseDirectory)
-
-                    val gtSize = GROUND_TRUTH_SIZE
-                    val gtFile = Paths.get(inputPath, s"groundtruth/$name/$gtSize/groundtruth.csv")
-                    val groundTruth = SparkUtils.readGroundTruthFileByFilename(sc, gtFile.toString)
-
-                    val appoxFile = Paths.get(inputPath, s"result/$name/$desiredSize/result.csv")
-                    val approximateResult = SparkUtils.readApproxFileByFilename(sc, appoxFile.toString)
-
-                    val maxFile = Paths.get(inputPath, s"$name/max-distances.csv")
-                    val maxDistances = SparkUtils.readMaxDistancesFileByFilename(sc, maxFile.toString)
+                    val approximateResult = SparkUtils.readApproxFile(sc,
+                        Paths.get(approxPath, s"$name/$desiredSize/result.csv"))
 
                     val distanceEvaluator = new KnnEuclideanSquareDistance
 
@@ -486,9 +1025,8 @@ object VrlshApp {
                     val desiredSize = t * k
 
                     // Se construye/deserializa el objeto knnQuery
-                    val baseDirectory = Paths.get(inputPath, s"$name/$desiredSize")
-
-                    val knnQuery = VrlshKnnConstructionAlgorithm.load(data.sparkContext, baseDirectory)
+                    val knnQuery = VrlshKnnConstructionAlgorithm.load(data.sparkContext,
+                        Paths.get(knnQueryPath, s"$name/$desiredSize"))
 
                     val generalStatistics = knnQuery.getGeneralStatistics()
                     generalStatistics.dataset = name
@@ -500,5 +1038,67 @@ object VrlshApp {
             }
         }
         CsvUtils.storeGlobal(outputDirectory, gobal)
+    }
+
+    def evaluateRecallAndMap(spark: SparkSession,
+                             testOptions: TestOptions,
+                             groundtruthPath: String,
+                             maxDistancesPath: String,
+                             knnQueryPath: String,
+                             approxPath: String): Unit = {
+        val sc = spark.sparkContext
+
+        println("=====> evaluateRecallAndMap =====")
+
+        val quality = testOptions.datasets.foreach { name =>
+
+            // Dataset
+            val data = testOptions.loadDataFile(sc, name)
+
+            // Testing data
+            val queries = testOptions.loadTestFileWithId(sc, name)
+
+            testOptions.ts.foreach { t =>
+                testOptions.ks.foreach { k =>
+                    val desiredSize = t * k
+
+                    val groundTruth = SparkUtils.readGroundTruthFile(sc,
+                        Paths.get(groundtruthPath, s"$name/$GROUND_TRUTH_SIZE/groundtruth.csv"))
+
+                    val maxDistances = SparkUtils.readMaxDistancesFile(sc,
+                        Paths.get(maxDistancesPath, s"$name/max-distances.csv"))
+
+                    // Se construye/deserializa el objeto knnQuery
+                    val knnQuery = VrlshKnnConstructionAlgorithm.load(data.sparkContext,
+                        Paths.get(knnQueryPath, s"$name/$desiredSize"))
+
+                    val approximateResult = SparkUtils.readApproxFile(sc,
+                        Paths.get(approxPath, s"$name/$desiredSize/result.csv"))
+
+                    val distanceEvaluator = new KnnEuclideanSquareDistance
+
+                    val statistics = TestingUtils.checkError(data,
+                        sc.parallelize(queries),
+                        groundTruth,
+                        approximateResult,
+                        maxDistances,
+                        distanceEvaluator,
+                        k)
+                        .map(s => {
+                            s.dataset = name
+                            s.t = t
+                            s.k = k
+                            s
+                        })
+
+                    val result = statistics.map(s => (s.recall, s.avgPrecision, 1))
+                        .reduce((a, b) => (a._1 + b._1, a._2 + b._2, a._3 + b._3))
+
+                    val recall = result._1 / result._3.toDouble
+                    val map = result._2 / result._3.toDouble
+                    println(f"    name: $name t: $t k: $k recall: $recall%1.5f MAP: $map%1.5f")
+                }
+            }
+        }
     }
 }

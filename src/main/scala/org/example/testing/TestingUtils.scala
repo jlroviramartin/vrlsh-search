@@ -48,54 +48,13 @@ object TestingUtils {
         (0 until count).map(_ => randomOutside(envelope, factor))
     }
 
-    /*def doQueries(knnQuery: KnnQuery,
-                  data: RDD[(Long, Vector)],
-                  distanceEvaluator: KnnDistance,
-                  k: Int,
-                  queries: immutable.Iterable[Vector],
-                  statistics: StatisticsCollector,
-                  errorCollector: ErrorCollector): Unit = {
-
-        val count = queries.size
-
-        println(s"Queries: $count")
-        println()
-
-        queries
-            .zipWithIndex
-            .foreach { case (query, index) => {
-                if (index % 100 == 0) {
-                    println(s"    == $index")
-                    println()
-                }
-
-                doQuery(knnQuery, data, distanceEvaluator, k, query, statistics, errorCollector)
-            }
-            }
-    }*/
-
     def doQueriesWithResult(knnQuery: KnnQuery,
                             distanceEvaluator: KnnDistance,
                             k: Int,
                             queries: immutable.Iterable[(Long, Vector)],
                             statistics: StatisticsCollector): immutable.Iterable[(Long, Array[Long])] = {
-
-        val count = queries.size
-
-        println(s"Queries: $count")
-        println()
-
         queries
-            .zipWithIndex
-            .map { case ((id, query), index) => {
-                if (index % 100 == 0) {
-                    println(s"    == $index")
-                    println()
-                }
-
-                (id, knnQuery.query(query, k, distanceEvaluator, statistics).map { case (vector, id) => id }.toArray)
-            }
-            }
+            .map { case (id, query) => (id, knnQuery.query(query, k, distanceEvaluator, statistics).map { case (_, id) => id }.toArray) }
     }
 
     def time_doQueriesWithResult(knnQuery: KnnQuery,
@@ -103,17 +62,9 @@ object TestingUtils {
                                  k: Int,
                                  queries: immutable.Iterable[(Long, Vector)],
                                  statistics: StatisticsCollector): Unit = {
-        queries
-            .zipWithIndex
-            .map { case ((id, query), index) => {
-                if (index % 100 == 0) {
-                    println(s"    == $index")
-                    println()
-                }
 
-                knnQuery.query(query, k, distanceEvaluator, statistics)
-            }
-            }
+        queries
+            .map { case (_, query) => knnQuery.query(query, k, distanceEvaluator, statistics) }
     }
 
     /**
@@ -158,7 +109,6 @@ object TestingUtils {
             .map { case ((id, query), index) => {
                 if (index % 100 == 0) {
                     println(s"    == $index")
-                    println()
                 }
 
                 // Knn calculado por el algoritmo

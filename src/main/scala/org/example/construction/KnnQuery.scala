@@ -23,5 +23,5 @@ trait KnnQuery {
 
 trait KnnQuerySerializable extends Serializable {
 
-    def get(sc: SparkContext): KnnQuery
+    def get(baseDirectory: String, sc: SparkContext): KnnQuery
 }
