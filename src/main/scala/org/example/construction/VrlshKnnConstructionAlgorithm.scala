@@ -32,6 +32,7 @@ class VrlshKnnConstructionAlgorithm(val hasherFactory: HasherFactory,
 
         // Contexto de Spark
         val sc = data.sparkContext
+        sc.setCheckpointDir("C:/spark/checkpoint")
 
         val dimension = data.first()._2.size
 
@@ -127,6 +128,7 @@ class VrlshKnnConstructionAlgorithm(val hasherFactory: HasherFactory,
                         { case (list1, list2) => list1 ++ list2 }
                     )
                     .map { case (hash, ids) => (savedRadius, hash, ids) })
+                result.checkpoint()
                 hasherMap.put(savedRadius, savedHasher)
 
                 println("Se calculan los nuevos índices")
@@ -144,7 +146,8 @@ class VrlshKnnConstructionAlgorithm(val hasherFactory: HasherFactory,
                         .union(currentIndices)
                         .reduceByKey((count1, count2) => count1 + count2)
                         .filter { case (_, count) => count < _minLevels }
-                        .persist(StorageLevel.MEMORY_AND_DISK)
+                        //.cache()
+                        //.persist(StorageLevel.MEMORY_AND_DISK)
                 } else {
                     val _minBuckets: Int = minBuckets
                     currentIndices = usedIndices
@@ -152,8 +155,10 @@ class VrlshKnnConstructionAlgorithm(val hasherFactory: HasherFactory,
                         .union(currentIndices)
                         .reduceByKey((count1, count2) => count1 + count2)
                         .filter { case (_, count) => count < _minBuckets }
-                        .persist(StorageLevel.MEMORY_AND_DISK)
+                        //.cache()
+                        //.persist(StorageLevel.MEMORY_AND_DISK)
                 }
+                currentIndices.checkpoint()
 
                 count = currentIndices.count()
             }
@@ -167,6 +172,8 @@ class VrlshKnnConstructionAlgorithm(val hasherFactory: HasherFactory,
             currentHasher = hashOptions.newHasher()
 
             iteration = iteration + 1
+
+            currentData.checkpoint()
 
             println("--------------------------------------------------")
         }

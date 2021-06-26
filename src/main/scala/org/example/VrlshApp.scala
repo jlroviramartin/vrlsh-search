@@ -58,11 +58,11 @@ object VrlshApp {
             "siftsmall" -> Paths.get("C:\\datasets\\siftsmall\\siftsmall_base_random_100.csv"),
             "audio" -> Paths.get("C:\\datasets\\audio\\audio_base_random_1000.csv"),
             "sift" -> Paths.get("C:\\datasets\\sift\\sift_base_random_10000.csv"))
-        testOptions.ts = Array(5, 10, 20, 40, 80)
+        testOptions.ts = Array(5, 10, 20, 40/*, 80*/)
         testOptions.ks = Array(100)
         testOptions.samples = 1000
 
-        val DATASET_PATH = "C:/datasets"
+        val DATASET_PATH = "W:/spark/datasets"
 
         // Se guardan las máximas distancias: testset -> DATASET_PATH/max-distances/<name>/max-distances.csv
         /*{
@@ -124,8 +124,8 @@ object VrlshApp {
 
 
 
-        val RUTA_BASE = "E:/result/vrlsh-13"
-        val minLevels = 5
+        val RUTA_BASE = "W:/spark/result/vrlsh-13"
+        val minLevels = 4
 
         println("''''' 1")
         prepareComparisonPerLevel(spark, testOptions, RUTA_BASE, minLevels)

@@ -96,11 +96,12 @@ object SparkUtils {
         // https://medium.com/big-data-engineering/how-to-install-apache-spark-2-x-in-your-pc-e2047246ffc3
         // SPARK_HOME
         // HADOOP_HOME
-        System.setProperty("hadoop.home.dir", "C:/Users/joseluis/OneDrive/Aplicaciones/spark-3.0.1-hadoop-3.2")
+        //System.setProperty("hadoop.home.dir", "C:/Users/joseluis/OneDrive/Aplicaciones/spark-3.0.1-hadoop-3.2")
+        System.setProperty("hadoop.home.dir", "W:/spark/spark-3.0.1-hadoop-3.2")
 
         //System.setProperty("hadoop.home.dir", "C:/Users/joseluis/OneDrive/Aplicaciones/spark-2.4.7-hadoop-2.7")
 
-        System.setProperty("spark.local.dir", "E:/tmp/spark")
+        System.setProperty("spark.local.dir", "W:/spark/tmp2")
 
         // http://spark.apache.org/docs/latest/monitoring.html
         System.setProperty("spark.ui.port", "44041")
@@ -110,9 +111,9 @@ object SparkUtils {
         val spark = SparkSession.builder
             .master(s"local[$cores]")
             .appName("Simple Application")
-            .config("spark.driver.maxResultSize", "0")
-            .config("spark.driver.memory", "16g")
-            .config("spark.executor.memory", "16g")
+            //.config("spark.driver.maxResultSize", "0")
+            //.config("spark.driver.memory", "16g")
+            //.config("spark.executor.memory", "32g")
             //.config("spark.driver.cores", "20")
             //.config("spark.driver.memory", "16g")
             //.config("spark.executor.cores", "20")
