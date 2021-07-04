@@ -12,13 +12,15 @@ trait Hash extends Serializable {
 class HashPoint(val values: Array[Int])
     extends Hash with Serializable {
 
+    val hash : Int = util.Arrays.hashCode(values)
+
     private def this() = this(new Array[Int](0))
 
     def this(seq: Int*) = this(seq.toArray)
 
     def this(seq: Iterable[Int]) = this(seq.toArray)
 
-    override def hashCode: Int = util.Arrays.hashCode(values)
+    override def hashCode: Int = hash
 
     override def equals(obj: Any): Boolean = {
         obj match {

@@ -45,7 +45,7 @@ object VrlshApp {
         testOptions.ts = Array(5, 10, 20, 40, 80)
         testOptions.ks = Array(100)*/
 
-        testOptions.datasets = Array(/*"siftsmall",*/ "corel", "shape", "audio", "sift")
+        testOptions.datasets = Array(/*"siftsmall" "shape", "audio", */ "corel", "sift")
         testOptions.dataFilePath = immutable.Map(
             "corel" -> Paths.get("C:\\datasets\\corel\\corel_random_652317.csv"),
             "shape" -> Paths.get("C:\\datasets\\shape\\shape_random_27775.csv"),
@@ -58,9 +58,9 @@ object VrlshApp {
             "siftsmall" -> Paths.get("C:\\datasets\\siftsmall\\siftsmall_base_random_100.csv"),
             "audio" -> Paths.get("C:\\datasets\\audio\\audio_base_random_1000.csv"),
             "sift" -> Paths.get("C:\\datasets\\sift\\sift_base_random_10000.csv"))
-        testOptions.ts = Array(5, 10, 20, 40/*, 80*/)
+        testOptions.ts = Array(5, 10, 20, 40 /*, 80*/)
         testOptions.ks = Array(100)
-        testOptions.samples = 1000
+        //testOptions.samples = 1000
 
         val DATASET_PATH = "W:/spark/datasets"
 
@@ -88,66 +88,37 @@ object VrlshApp {
 
         // ===== INICIO =====
 
-        //prepareComparisonPerLevel(spark, testOptions, "C:/result/vrlsh-11", 1)
-        //prepareComparisonPerLevel(spark, testOptions, "C:/result/vrlsh-11", 2)
+        val RUTA_BASE = "W:/spark/result/vrlsh-test3"
 
-        //evaluateComparisonPerLevel(spark, testOptions, "C:/result/vrlsh-11", 1, 1)
-        //evaluateComparisonPerLevel(spark, testOptions, "C:/result/vrlsh-11", 1, 2)
-        //evaluateComparisonPerLevel(spark, testOptions, "C:/result/vrlsh-11", 1, 5)
-        //evaluateComparisonPerLevel(spark, testOptions, "C:/result/vrlsh-11", 1, 10)
+        /*for (minLevels <- List(4, 3, 2, 1)) {
+            println(s"minLevels: $minLevels (1)")
+            prepareComparisonPerLevel(spark, testOptions, RUTA_BASE, minLevels)
+        }*/
 
-        //evaluateComparisonPerLevel(spark, testOptions, "C:/result/vrlsh-11", 2, 1)
-        //evaluateComparisonPerLevel(spark, testOptions, "C:/result/vrlsh-11", 2, 2)
-        //evaluateComparisonPerLevel(spark, testOptions, "C:/result/vrlsh-11", 2, 5)
-        //evaluateComparisonPerLevel(spark, testOptions, "C:/result/vrlsh-11", 2, 10)
+        println("===== Calculando las aproximaciones =====")
+        for (minLevels <- List(4, 3, 2, 1)) {
+            for (searchInLevels <- List(5, 4, 3, 2, 1)) {
+                println(s"minLevels: $minLevels searchInLevels: $searchInLevels (2)")
+                evaluateComparisonPerLevel(spark, testOptions, RUTA_BASE, minLevels, searchInLevels)
+            }
+        }
 
-        //evaluateErrorComparisonPerLevel(spark, testOptions, "C:/result/vrlsh-11", 1, 1)
-        //evaluateErrorComparisonPerLevel(spark, testOptions, "C:/result/vrlsh-11", 1, 2)
-        //evaluateErrorComparisonPerLevel(spark, testOptions, "C:/result/vrlsh-11", 1, 5)
-        //evaluateErrorComparisonPerLevel(spark, testOptions, "C:/result/vrlsh-11", 1, 10)
+        println("===== Midiendo =====")
+        for (minLevels <- List(4, 3, 2, 1)) {
+            for (searchInLevels <- List(5, 4, 3, 2, 1)) {
+                println(s"minLevels: $minLevels searchInLevels: $searchInLevels (3)")
+                evaluateErrorComparisonPerLevel(spark, testOptions, RUTA_BASE, minLevels, searchInLevels)
+            }
+        }
 
-        //evaluateErrorComparisonPerLevel(spark, testOptions, "C:/result/vrlsh-11", 2, 1)
-        //evaluateErrorComparisonPerLevel(spark, testOptions, "C:/result/vrlsh-11", 2, 2)
-        //evaluateErrorComparisonPerLevel(spark, testOptions, "C:/result/vrlsh-11", 2, 5)
-        //evaluateErrorComparisonPerLevel(spark, testOptions, "C:/result/vrlsh-11", 2, 10)
+        /*println("===== Calculando el tiempo =====")
+        for (minLevels <- List(4, 3, 2, 1)) {
+            for (searchInLevels <- List(5, 4, 3, 2, 1)) {
+                println(s"minLevels: $minLevels searchInLevels: $searchInLevels (4)")
+                evaluateTimePerLevel(spark, testOptions, RUTA_BASE, minLevels, searchInLevels)
+            }
+        }*/
 
-        //evaluateTimePerLevel(spark, testOptions, "C:/result/vrlsh-11", 1, 1)
-        //evaluateTimePerLevel(spark, testOptions, "C:/result/vrlsh-11", 1, 2)
-        //evaluateTimePerLevel(spark, testOptions, "C:/result/vrlsh-11", 1, 5)
-        //evaluateTimePerLevel(spark, testOptions, "C:/result/vrlsh-11", 1, 10)
-
-        //evaluateTimePerLevel(spark, testOptions, "C:/result/vrlsh-11", 2, 1)
-        //evaluateTimePerLevel(spark, testOptions, "C:/result/vrlsh-11", 2, 2)
-        //evaluateTimePerLevel(spark, testOptions, "C:/result/vrlsh-11", 2, 5)
-        //evaluateTimePerLevel(spark, testOptions, "C:/result/vrlsh-11", 2, 10)
-
-
-
-
-        val RUTA_BASE = "W:/spark/result/vrlsh-13"
-        val minLevels = 4
-
-        println("''''' 1")
-        prepareComparisonPerLevel(spark, testOptions, RUTA_BASE, minLevels)
-/*
-        println("''''' 2")
-        evaluateComparisonPerLevel(spark, testOptions, RUTA_BASE, minLevels, 1)
-        evaluateComparisonPerLevel(spark, testOptions, RUTA_BASE, minLevels, 2)
-        evaluateComparisonPerLevel(spark, testOptions, RUTA_BASE, minLevels, 5)
-        //evaluateComparisonPerLevel(spark, testOptions, RUTA_BASE, minLevels, 10)
-
-        println("''''' 3")
-        evaluateErrorComparisonPerLevel(spark, testOptions, RUTA_BASE, minLevels, 1)
-        evaluateErrorComparisonPerLevel(spark, testOptions, RUTA_BASE, minLevels, 2)
-        evaluateErrorComparisonPerLevel(spark, testOptions, RUTA_BASE, minLevels, 5)
-        //evaluateErrorComparisonPerLevel(spark, testOptions, RUTA_BASE, minLevels, 10)
-
-        println("''''' 4")
-        //evaluateTimePerLevel(spark, testOptions, RUTA_BASE, minLevels, 1)
-        //evaluateTimePerLevel(spark, testOptions, RUTA_BASE, minLevels, 2)
-        //evaluateTimePerLevel(spark, testOptions, RUTA_BASE, minLevels, 5)
-        //evaluateTimePerLevel(spark, testOptions, RUTA_BASE, minLevels, 10)
-*/
         println("Finaliza: parada spark")
 
         spark.stop()
